@@ -14,14 +14,29 @@ body {
 }
 
 h1 {
-  margin: 0 0 6px;
-  font-size: 1.4rem;
+  margin: 0 0 8px;
+  font-size: 1.8rem;
+  color: #006400;
+  font-family: "Hiragino Maru Gothic Pro", "Yu Gothic", sans-serif;
+  letter-spacing: 0.05em;
 }
 
 .sub {
-  margin: 0 0 12px;
-  font-size: 0.95rem;
-  opacity: 0.8;
+  margin: 0 0 20px;
+  font-size: 0.9rem;
+  color: #c5a000;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.header-banner {
+  background-image: url("./assets/header-bg.png");
+  background-size: cover;
+  background-position: center;
+  padding: 40px 20px;
+  text-align: center;
+  border-radius: 12px;
+  margin-bottom: 24px;
 }
 
 .score-board {
