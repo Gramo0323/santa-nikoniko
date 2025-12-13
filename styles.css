@@ -1,0 +1,219 @@
+:root {
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f5f5f5;
+}
+
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 1.4rem;
+}
+
+.sub {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  opacity: 0.8;
+}
+
+.score-board {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-weight: bold;
+  color: #444;
+}
+
+.score-item span {
+  font-size: 1.2rem;
+  margin-right: 2px;
+}
+
+.btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 1rem;
+}
+
+#days {
+  display: grid;
+  gap: 10px;
+}
+
+.day {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #e7e7e7;
+}
+
+.day-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.row label {
+  min-width: 72px;
+}
+
+.choices {
+  display: flex;
+  gap: 8px;
+}
+
+.choice {
+  font-size: 1.6rem;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  background: #fff;
+}
+
+.choice.selected {
+  border-color: #333;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+}
+
+.today-highlight {
+  border: 2px solid #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 520px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .choices {
+    justify-content: stretch;
+  }
+
+  .choice {
+    width: 100%;
+  }
+}
+
+/* Step 3: Sugoroku */
+#sugorokuArea {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e7e7e7;
+}
+
+#sugorokuArea h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+}
+
+.square {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #bbb;
+  position: relative;
+  overflow: hidden;
+}
+
+.square.cleared {
+  background: #fdfdfd;
+  color: #333;
+  border-color: #aaa;
+}
+
+.square.cleared::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background-image: url('./assets/santa_stamp.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.square.current {
+  border: 2px solid #333;
+  font-weight: bold;
+  color: #000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+  transform: scale(1.1);
+  background: #fff;
+}
+
+.square.current::after {
+  opacity: 0.5;
+}
+
+.square.goal {
+  border: 2px double #fbc02d;
+  background: #fffde7;
+}
+
+.square.goal.cleared {
+  background: #fff9c4;
+  border-color: #fbc02d;
+  color: #f57f17;
+}
+
+@media (max-width: 520px) {
+  .board {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Auth Styles */
+.input-text {
+  padding: 10px 12px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  flex: 1;
+}
+
+.btn-primary {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #333;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.btn-primary:active {
+  background: #555;
+  transform: translateY(1px);
+}

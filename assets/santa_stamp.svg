@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Hat -->
+  <path d="M20,40 Q50,0 80,40 Z" fill="#D32F2F" stroke="#333" stroke-width="3" />
+  <circle cx="80" cy="40" r="8" fill="#fff" stroke="#333" stroke-width="3" />
+  <!-- Face -->
+  <circle cx="50" cy="60" r="25" fill="#FFE0B2" stroke="#333" stroke-width="3" />
+  <!-- Beard -->
+  <path d="M25,60 Q50,95 75,60 Q70,80 50,85 Q30,80 25,60" fill="#fff" stroke="#333" stroke-width="3" />
+  <!-- Eyes -->
+  <circle cx="42" cy="55" r="2" fill="#333" />
+  <circle cx="58" cy="55" r="2" fill="#333" />
+  <!-- Smile -->
+  <path d="M45,65 Q50,68 55,65" fill="none" stroke="#333" stroke-width="2" />
+</svg>
