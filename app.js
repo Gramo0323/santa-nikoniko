@@ -9,6 +9,8 @@ const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
 // 状態管理
 let appState = {};
 let supabaseClient = null;
+let isHydrated = false; // 初期ロード完了フラグ
+let saveTimeout = null; // デバウンス用タイマー
 
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
@@ -33,16 +35,41 @@ async function loadData() {
         if (raw) {
             appState = JSON.parse(raw);
         }
+        isHydrated = true; // LocalStorage読み込み完了でHydratedとする（未ログイン時）
         renderDays();
         updatePoints();
     } catch (e) {
         console.error("保存データの読み込みに失敗しました", e);
+        // エラーでも操作可能にするためHydratedにはする（ただし空データ）
+        isHydrated = true;
     }
 }
 
 async function saveData() {
+    // 【重要】初期ロードが完了するまでは保存しない（空データでの上書き防止）
+    if (!isHydrated) {
+        console.warn("Skipping save: Not hydrated yet.");
+        return;
+    }
+
+    // デバウンス処理（連打対策：500ms待ってから保存）
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+    }
+
+    saveTimeout = setTimeout(async () => {
+        _performSave();
+    }, 500);
+}
+
+// 実際の保存処理
+async function _performSave() {
     // 常にlocalStorageには保存（オフライン対応/バックアップ）
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    } catch (e) {
+        console.error("LocalStorage save error:", e);
+    }
 
     // ログイン中ならSupabaseにも保存
     if (supabaseClient) {
@@ -69,23 +96,45 @@ async function loadDataFromSupabase(userId) {
         // 逆マッピング用のオブジェクト
         const DB_TO_UI = { "good": "😊", "ok": "🙂", "bad": "😢" };
 
-        appState = {};
+        const newState = {};
         if (data) {
             data.forEach(row => {
-                if (!appState[row.date]) appState[row.date] = {};
+                if (!newState[row.date]) newState[row.date] = {};
                 const uiValue = DB_TO_UI[row.value];
                 if (uiValue) {
-                    appState[row.date][row.session] = uiValue;
+                    newState[row.date][row.session] = uiValue;
                 }
             });
         }
 
+        appState = newState;
+
+        // 【重要】Supabaseから取得したデータをLocalStorageにも反映（キャッシュ同期）
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        } catch (e) {
+            console.error("LocalStorage sync error:", e);
+        }
+
+        isHydrated = true; // Supabase同期完了
         console.log("Supabase(progress)からデータを読み込みました");
         renderDays();
         updatePoints();
 
     } catch (e) {
         console.error("Supabase load error:", e);
+        // エラー時でも、とりあえずLocalStorageにあるものでHydratedとする（操作不能を防ぐ）
+        // ただし、appStateは更新していないので、既にLocalStorageからロード済みならそのまま
+        if (!isHydrated) {
+            // まだ一度も表示していないならLocalStorageから復元を試みる最終手段
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) appState = JSON.parse(raw);
+            } catch (localE) { }
+            isHydrated = true;
+            renderDays();
+            updatePoints();
+        }
     }
 }
 
