@@ -179,6 +179,29 @@ async function saveDataToSupabase(userId) {
     }
 }
 
+async function deleteStampFromSupabase(dateKey, sessionKey) {
+    if (!supabaseClient) return;
+
+    // ログインチェック
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('progress')
+            .delete()
+            .eq('board_id', BOARD_ID) // 現状の固定ID運用に合わせる
+            .eq('date', dateKey)
+            .eq('session', parseInt(sessionKey, 10));
+
+        if (error) throw error;
+        console.log(`Supabaseから削除しました: ${dateKey} - ${sessionKey}`);
+
+    } catch (e) {
+        console.error("Supabase delete error:", e);
+    }
+}
+
 function renderDays() {
     const container = document.getElementById("days");
     container.innerHTML = "";
@@ -269,6 +292,9 @@ function handleChoiceClick(e) {
     // トグル動作：既に選択されているものを押したら解除
     if (appState[dateKey][time] === type) {
         delete appState[dateKey][time];
+        // Supabaseからも即座に削除
+        deleteStampFromSupabase(dateKey, time);
+
         // 空になったらキー削除（データクリーンアップ）
         if (Object.keys(appState[dateKey]).length === 0) {
             delete appState[dateKey];
