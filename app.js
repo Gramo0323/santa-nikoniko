@@ -12,11 +12,115 @@ let supabaseClient = null;
 let isHydrated = false; // 初期ロード完了フラグ
 let saveTimeout = null; // デバウンス用タイマー
 
+// 音管理
+const SoundManager = {
+    ctx: null,
+    enabled: true,
+    volume: 0.3,
+
+    init() {
+        // localStorageから設定読み込み
+        const saved = localStorage.getItem("santa_sound_config");
+        if (saved) {
+            const config = JSON.parse(saved);
+            this.enabled = config.enabled;
+        }
+        this.updateBtn();
+
+        // ユーザー操作でAudioContext有効化
+        document.addEventListener('click', () => this.resume(), { once: true });
+        document.getElementById('soundToggleBtn').addEventListener('click', () => this.toggle());
+    },
+
+    resume() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    toggle() {
+        this.enabled = !this.enabled;
+        this.updateBtn();
+        this.saveConfig();
+        if (this.enabled) this.play('ok'); // 確認音
+    },
+
+    updateBtn() {
+        const btn = document.getElementById('soundToggleBtn');
+        if (btn) btn.textContent = this.enabled ? "♪ 音:ON" : "♪ 音:OFF";
+    },
+
+    saveConfig() {
+        localStorage.setItem("santa_sound_config", JSON.stringify({ enabled: this.enabled }));
+    },
+
+    play(type) {
+        if (!this.enabled) return;
+        this.resume();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        const now = this.ctx.currentTime;
+
+        if (type === 'happy') {
+            // 明るい和音アルペジオ的なピコピコ
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+            gain.gain.setValueAtTime(this.volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === 'ok') {
+            // 優しい音
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, now);
+            gain.gain.setValueAtTime(this.volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now);
+            osc.stop(now + 0.15);
+        } else if (type === 'bad') {
+            // 静かな音
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, now);
+            gain.gain.setValueAtTime(this.volume * 0.5, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'streak') {
+            // キラキラ
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(523.25, now); // C5
+            osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+            osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+            osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+
+            gain.gain.setValueAtTime(this.volume, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
+
+            osc.start(now);
+            osc.stop(now + 0.6);
+        } else if (type === 'bonus') {
+            // ボーナス用（少しリッチに）
+            this.play('streak'); // 既存のstreak音を流用しつつ追加など
+        }
+    }
+};
+
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
     initSupabase();
     // loadData() は initSupabase -> setupAuth -> updateAuthUI の流れで呼ばれるように変更
     setupResetButton();
+    SoundManager.init();
 });
 
 async function loadData() {
@@ -76,7 +180,12 @@ async function _performSave() {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             await saveDataToSupabase(session.user.id);
+        } else {
+            // ローカルのみ保存の場合もSaved表示
+            showSaveStatus(true);
         }
+    } else {
+        showSaveStatus(true);
     }
 }
 
@@ -172,10 +281,64 @@ async function saveDataToSupabase(userId) {
             .upsert(updates, { onConflict: 'board_id, date, session' });
 
         if (error) throw error;
+        if (error) throw error;
         console.log("Supabase(progress)に保存しました");
-
+        showSaveStatus(true);
     } catch (e) {
         console.error("Supabase save error:", e);
+        showSaveStatus(false);
+    }
+}
+
+async function deleteStampFromSupabase(dateKey, sessionKey) {
+    if (!supabaseClient) return;
+
+    // ログインチェック
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('progress')
+            .delete()
+            .eq('board_id', BOARD_ID) // 現状の固定ID運用に合わせる
+            .eq('date', dateKey)
+            .eq('session', parseInt(sessionKey, 10));
+
+        if (error) throw error;
+        console.log(`Supabaseから削除しました: ${dateKey} - ${sessionKey}`);
+        showSaveStatus(true);
+    } catch (e) {
+        console.error("Supabase delete error:", e);
+        showSaveStatus(false);
+    }
+}
+
+function showSaveStatus(success) {
+    const el = document.getElementById("saveStatus");
+    if (!el) return;
+    el.classList.remove("fadeout");
+    if (success) {
+        el.textContent = "保存しました✓";
+        el.style.color = "#006400";
+        setTimeout(() => {
+            el.classList.add("fadeout");
+        }, 2000);
+
+        // ボーナス演出発火（予約がある場合）
+        if (window.pendingBonusAnimation) {
+            window.pendingBonusAnimation = false;
+            const overlay = document.getElementById('bonusOverlay');
+            if (overlay) {
+                overlay.classList.remove('active');
+                void overlay.offsetWidth; // リフロー
+                overlay.classList.add('active');
+                SoundManager.play('bonus');
+            }
+        }
+    } else {
+        el.textContent = "未保存⚠︎";
+        el.style.color = "red";
     }
 }
 
@@ -203,11 +366,21 @@ function renderDays() {
         dayEl.className = "day";
         // 今日の場合は強調用クラスをつける（CSSで枠線を太くするなど任意だが、今回は並び順変更が主）
         if (dateKey === todayKey) {
-            dayEl.classList.add("today-highlight"); // 必要ならCSS追加。今回はJSで並び順制御のみでもOKだが、クラスは振っておく
+            dayEl.classList.add("today-highlight");
+        }
+
+        let titleHtml = `${displayDate}（${dayOfWeek}）`;
+        if (dateKey === todayKey) {
+            titleHtml += " <span style='font-size:0.8em; color:#888;'>★きょう</span>";
+        }
+
+        // ボーナス達成バッジ（その日クリア）
+        if (isGoodDay(dateKey)) {
+            titleHtml += ` <span class="bonus-badge">BONUS✓</span>`;
         }
 
         dayEl.innerHTML = `
-      <div class="day-title">${displayDate}（${dayOfWeek}）${dateKey === todayKey ? " <span style='font-size:0.8em; color:#888;'>★きょう</span>" : ""}</div>
+      <div class="day-title">${titleHtml}</div>
       ${createRowHtml(dateKey, 1)}
       ${createRowHtml(dateKey, 2)}
     `;
@@ -266,9 +439,15 @@ function handleChoiceClick(e) {
         appState[dateKey] = {};
     }
 
+    const todayKey = formatDateKey(new Date());
+    const wasGood = isGoodDay(todayKey); // 変更前の状態
+
     // トグル動作：既に選択されているものを押したら解除
     if (appState[dateKey][time] === type) {
         delete appState[dateKey][time];
+        // Supabaseからも即座に削除
+        deleteStampFromSupabase(dateKey, time);
+
         // 空になったらキー削除（データクリーンアップ）
         if (Object.keys(appState[dateKey]).length === 0) {
             delete appState[dateKey];
@@ -276,6 +455,17 @@ function handleChoiceClick(e) {
     } else {
         // 上書き選択
         appState[dateKey][time] = type;
+
+        // 音を鳴らす
+        if (type === "😊") SoundManager.play('happy');
+        else if (type === "🙂") SoundManager.play('ok');
+        else SoundManager.play('bad');
+    }
+
+    // ボーナス演出判定（保存処理とは非同期だが、操作直後のフィードバックとして予約）
+    const isNowGood = isGoodDay(todayKey);
+    if (!wasGood && isNowGood && dateKey === todayKey) {
+        window.pendingBonusAnimation = true;
     }
 
     saveData();
@@ -284,8 +474,10 @@ function handleChoiceClick(e) {
 }
 
 function updatePoints() {
-    let totalScore = 0;
-    let todayScore = 0;
+    let totalBase = 0; // 基本点（スタンプの合計）
+    let totalBonus = 0; // ボーナス点（1日2回達成の日数 × 1点）
+    let todayBase = 0;
+    let todayBonus = 0;
 
     // 今日の日付キーを取得（期間判定も兼ねる）
     const now = new Date();
@@ -297,13 +489,13 @@ function updatePoints() {
         isTodayInRange = true;
     }
 
-    // 全データの集計
+    // 1. 基本点の集計
     Object.keys(appState).forEach(dateKey => {
         const dayData = appState[dateKey];
         if (dayData) {
             Object.values(dayData).forEach(val => {
                 if (POINTS.hasOwnProperty(val)) {
-                    totalScore += POINTS[val];
+                    totalBase += POINTS[val];
                 }
             });
 
@@ -311,34 +503,152 @@ function updatePoints() {
             if (dateKey === todayKey) {
                 Object.values(dayData).forEach(val => {
                     if (POINTS.hasOwnProperty(val)) {
-                        todayScore += POINTS[val];
+                        todayBase += POINTS[val];
                     }
                 });
             }
         }
     });
 
+    // 2. ボーナス点の集計（期間内の日付について isGoodDay を判定）
+    let checkDate = new Date(START_DATE);
+    while (checkDate <= END_DATE) {
+        const dKey = formatDateKey(checkDate);
+        if (isGoodDay(dKey)) {
+            totalBonus += 1;
+            if (dKey === todayKey) {
+                todayBonus = 1;
+            }
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
+    }
+
+    const totalAll = totalBase + totalBonus;
+    const todayAll = todayBase + todayBonus;
+
     // UI更新
-    document.getElementById("scoreTotal").textContent = totalScore;
+    // 既存仕様維持：単純合計を表示
+    document.getElementById("scoreTotal").textContent = totalAll;
 
     const todayEl = document.getElementById("scoreToday");
     if (isTodayInRange) {
-        todayEl.textContent = todayScore;
+        todayEl.textContent = todayAll;
         todayEl.parentElement.childNodes[0].textContent = "きょう ";
     } else {
         todayEl.textContent = "0";
         todayEl.parentElement.childNodes[0].textContent = "きょう（きかんがい） ";
     }
 
-    renderSugoroku(totalScore);
+    // スゴロク描画（合計点と基本点を渡す）
+    renderSugoroku(totalAll, totalBase);
+    calculateStreak();
 }
 
-function renderSugoroku(score) {
+function calculateStreak() {
+    const today = new Date();
+    const todayKey = formatDateKey(today);
+
+    // 期間内の日付リスト作成（開始日〜今日）
+    let checkDate = new Date(START_DATE);
+    const dateKeys = [];
+    while (checkDate <= END_DATE && checkDate <= today) {
+        dateKeys.push(formatDateKey(checkDate));
+        checkDate.setDate(checkDate.getDate() + 1);
+    }
+
+    // 逆順（今日から過去へ）でチェック
+    // ストリークの定義：
+    // 「連続成功数」。今日が成功なら+1、昨日が成功なら+1... 途切れたら終了
+    // ただし「今日の分」がまだ未達成でも、昨日まで続いていれば「継続中」とみなして表示したいが、
+    // 「今何日連続か」という事実は「完了した日の数」で数えるのが自然。
+
+    let currentStreak = 0;
+    // 日付昇順リストなので逆順ループ
+    for (let i = dateKeys.length - 1; i >= 0; i--) {
+        const dKey = dateKeys[i];
+        if (isGoodDay(dKey)) {
+            currentStreak++;
+        } else {
+            // 今日(dateKeys[dateKeys.length-1]) がダメでも、それが今日の未入力のせいなら、
+            // ストリークが「途切れた」と判定するのは早いかもしれないが、
+            // 「N日連続達成中！」というバッジは「完了形」の数を出すのがセオリー。
+            // 昨日の時点で5日連続なら、今日も完了しないと「6日連続」にはならない。
+            // よってシンプルに「直近から連続していくつGoodDayがあるか」を数える。
+            break;
+        }
+    }
+
+    // 表示更新
+    const badge = document.getElementById("streakBadge");
+    if (badge) {
+        if (currentStreak >= 2) {
+            badge.style.display = "inline-block";
+            badge.textContent = `🔥 ${currentStreak}日連続！`;
+
+            // ストリークが増えたら音（簡易実装：前回値より増えていれば鳴らす）
+            // 注意: リロード時は lastStreak=0 なので鳴る可能性があるが、
+            // ユーザー操作時以外は鳴らさない制御が必要。
+            // 今回はシンプルに「SoundManager.play('streak')」を呼び出すだけに留める（updatePointsが頻繁に呼ばれる可能性を考慮し、状態管理が必要だが、最小実装）。
+            // 安全策：streak音は updatePoints からは呼ばず、handleChoiceClick で判定するか、
+            // ここで lastStreak と比較して増えた時だけ鳴らす。
+            if (typeof lastStreak !== 'undefined' && currentStreak > lastStreak && lastStreak > 0) {
+                SoundManager.play('streak');
+            }
+        } else {
+            badge.style.display = "none";
+        }
+    }
+
+    // グローバル変数として保持（簡易）
+    window.lastStreak = currentStreak;
+
+    // 予告メッセージ作成
+    let forecastMsg = "";
+    const todayData = appState[todayKey] || {};
+    const val1 = todayData[1];
+    const val2 = todayData[2];
+    const isTodayGood = isGoodOrBetter(val1) && isGoodOrBetter(val2);
+
+    if (isTodayGood) {
+        forecastMsg = "きょうは ボーナス もらえた！";
+    } else {
+        let missing = 0;
+        if (!isGoodOrBetter(val1)) missing++;
+        if (!isGoodOrBetter(val2)) missing++;
+        if (missing > 0) {
+            forecastMsg = `きょう あと${missing}回🙂以上で ボーナス！`;
+        }
+    }
+
+    const forecastEl = document.getElementById("forecastMsg");
+    if (forecastEl) {
+        forecastEl.textContent = forecastMsg;
+        if (isTodayGood) {
+            forecastEl.style.color = "#d32f2f";
+            forecastEl.style.fontWeight = "bold";
+        } else {
+            forecastEl.style.color = "#555";
+            forecastEl.style.fontWeight = "normal";
+        }
+    }
+}
+
+function isGoodDay(dateKey) {
+    const d = appState[dateKey];
+    if (!d) return false;
+    return isGoodOrBetter(d[1]) && isGoodOrBetter(d[2]);
+}
+
+function isGoodOrBetter(val) {
+    return val === "😊" || val === "🙂";
+}
+
+function renderSugoroku(totalScore, baseScore) {
     const container = document.getElementById("sugorokuBoard");
     container.innerHTML = "";
 
     // スコアの上限は40（ゴール）
-    const progress = Math.min(score, 40);
+    const progress = Math.min(totalScore, 40);
 
     for (let i = 1; i <= 40; i++) {
         const sq = document.createElement("div");
@@ -346,8 +656,20 @@ function renderSugoroku(score) {
         sq.textContent = i;
 
         // クラス適用
-        if (i <= progress) {
+        // 1. 基本点で到達したか
+        if (i <= baseScore && i <= 40) {
             sq.classList.add("cleared");
+        }
+        // 2. ボーナス点で到達したか（基本点より大きく、かつ合計点以内）
+        else if (i > baseScore && i <= progress) {
+            sq.classList.add("bonus-cleared");
+            // ユーザー要件によりimg要素を生成・挿入
+            const img = document.createElement("img");
+            // file:// プロトコルでも正しく参照できるようにベースURIを使用
+            img.src = new URL('assets/bonus-santa.png', document.baseURI).href;
+            img.alt = "BONUS Santa";
+            img.className = "bonus-img";
+            sq.appendChild(img);
         }
 
         if (i === 40) {
@@ -357,10 +679,8 @@ function renderSugoroku(score) {
             }
         }
 
-        // 現在地（0より大きく、かつ まだゴールしていないか、これがゴールなら）
-        // 仕様：進み＝全期間合計点。40以上はゴール扱い。
-        // scoreが0のときは何も選択されていない
-        if (score > 0 && (i === progress)) {
+        // 現在地（Totalで判定）
+        if (totalScore > 0 && (i === progress)) {
             sq.classList.add("current");
         }
 

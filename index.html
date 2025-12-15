@@ -19,7 +19,16 @@
             <div class="score-item">ぜんぶ <span id="scoreTotal">0</span>てん</div>
         </div>
         <button id="resetBtn" class="btn">ぜんぶ けす</button>
+        <button id="soundToggleBtn" class="btn" style="margin-left:8px;">♪ 音:ON</button>
     </header>
+
+    <div id="statusArea" class="wrap"
+        style="text-align:right; margin-bottom:-10px; height:20px; font-size:0.8rem; color:#006400; font-weight:bold;">
+        <!-- Streak & Save Status -->
+        <span id="streakBadge" style="margin-right:12px; display:none;">🔥 0日連続！</span>
+        <span id="forecastMsg" style="margin-right:12px; font-weight:normal; color:#555;"></span>
+        <span id="saveStatus"></span>
+    </div>
 
     <main class="wrap">
         <div id="sugorokuArea">
@@ -53,6 +62,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
     <script src="./app.js"></script>
+    <div id="bonusOverlay" class="bonus-overlay">
+        <div>+1 ボーナス！</div>
+        <div style="font-size: 3rem; margin-top:10px;">🎉</div>
+    </div>
 </body>
 
 </html>
