@@ -855,3 +855,45 @@ function updateAuthUI(session) {
         loadData();
     }
 }
+
+// Step 1: Timer Logic
+let timerDuration = 600; // default 10min
+
+function setupTimer() {
+    const presetSelect = document.getElementById("timerPreset");
+    const startBtn = document.getElementById("timerStartBtn");
+    const overlay = document.getElementById("timerOverlay");
+    const closeBtn = document.getElementById("timerCloseBtn");
+    const display = document.getElementById("timerDisplay");
+
+    if (!presetSelect || !startBtn || !overlay) return;
+
+    // Preset Change
+    presetSelect.addEventListener("change", (e) => {
+        timerDuration = parseInt(e.target.value, 10);
+        updateTimerDisplay(display, timerDuration);
+    });
+
+    // Start
+    startBtn.addEventListener("click", () => {
+        updateTimerDisplay(display, timerDuration);
+        overlay.style.display = "flex";
+    });
+
+    // Close
+    closeBtn.addEventListener("click", () => {
+        overlay.style.display = "none";
+    });
+}
+
+function updateTimerDisplay(el, seconds) {
+    if (!el) return;
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    el.textContent = `${m}:${s}`;
+}
+
+// Add to initialization
+document.addEventListener("DOMContentLoaded", () => {
+    setupTimer();
+});
