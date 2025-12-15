@@ -474,8 +474,10 @@ function handleChoiceClick(e) {
 }
 
 function updatePoints() {
-    let totalScore = 0;
-    let todayScore = 0;
+    let totalBase = 0; // 基本点（スタンプの合計）
+    let totalBonus = 0; // ボーナス点（1日2回達成の日数 × 1点）
+    let todayBase = 0;
+    let todayBonus = 0;
 
     // 今日の日付キーを取得（期間判定も兼ねる）
     const now = new Date();
@@ -487,13 +489,13 @@ function updatePoints() {
         isTodayInRange = true;
     }
 
-    // 全データの集計
+    // 1. 基本点の集計
     Object.keys(appState).forEach(dateKey => {
         const dayData = appState[dateKey];
         if (dayData) {
             Object.values(dayData).forEach(val => {
                 if (POINTS.hasOwnProperty(val)) {
-                    totalScore += POINTS[val];
+                    totalBase += POINTS[val];
                 }
             });
 
@@ -501,26 +503,44 @@ function updatePoints() {
             if (dateKey === todayKey) {
                 Object.values(dayData).forEach(val => {
                     if (POINTS.hasOwnProperty(val)) {
-                        todayScore += POINTS[val];
+                        todayBase += POINTS[val];
                     }
                 });
             }
         }
     });
 
+    // 2. ボーナス点の集計（期間内の日付について isGoodDay を判定）
+    let checkDate = new Date(START_DATE);
+    while (checkDate <= END_DATE) {
+        const dKey = formatDateKey(checkDate);
+        if (isGoodDay(dKey)) {
+            totalBonus += 1;
+            if (dKey === todayKey) {
+                todayBonus = 1;
+            }
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
+    }
+
+    const totalAll = totalBase + totalBonus;
+    const todayAll = todayBase + todayBonus;
+
     // UI更新
-    document.getElementById("scoreTotal").textContent = totalScore;
+    // 既存仕様維持：単純合計を表示
+    document.getElementById("scoreTotal").textContent = totalAll;
 
     const todayEl = document.getElementById("scoreToday");
     if (isTodayInRange) {
-        todayEl.textContent = todayScore;
+        todayEl.textContent = todayAll;
         todayEl.parentElement.childNodes[0].textContent = "きょう ";
     } else {
         todayEl.textContent = "0";
         todayEl.parentElement.childNodes[0].textContent = "きょう（きかんがい） ";
     }
 
-    renderSugoroku(totalScore);
+    // スゴロク描画（合計点と基本点を渡す）
+    renderSugoroku(totalAll, totalBase);
     calculateStreak();
 }
 
@@ -623,12 +643,12 @@ function isGoodOrBetter(val) {
     return val === "😊" || val === "🙂";
 }
 
-function renderSugoroku(score) {
+function renderSugoroku(totalScore, baseScore) {
     const container = document.getElementById("sugorokuBoard");
     container.innerHTML = "";
 
     // スコアの上限は40（ゴール）
-    const progress = Math.min(score, 40);
+    const progress = Math.min(totalScore, 40);
 
     for (let i = 1; i <= 40; i++) {
         const sq = document.createElement("div");
@@ -636,8 +656,20 @@ function renderSugoroku(score) {
         sq.textContent = i;
 
         // クラス適用
-        if (i <= progress) {
+        // 1. 基本点で到達したか
+        if (i <= baseScore && i <= 40) {
             sq.classList.add("cleared");
+        }
+        // 2. ボーナス点で到達したか（基本点より大きく、かつ合計点以内）
+        else if (i > baseScore && i <= progress) {
+            sq.classList.add("bonus-cleared");
+            // ユーザー要件によりimg要素を生成・挿入
+            const img = document.createElement("img");
+            // file:// プロトコルでも正しく参照できるようにベースURIを使用
+            img.src = new URL('assets/bonus-santa.png', document.baseURI).href;
+            img.alt = "BONUS Santa";
+            img.className = "bonus-img";
+            sq.appendChild(img);
         }
 
         if (i === 40) {
@@ -647,10 +679,8 @@ function renderSugoroku(score) {
             }
         }
 
-        // 現在地（0より大きく、かつ まだゴールしていないか、これがゴールなら）
-        // 仕様：進み＝全期間合計点。40以上はゴール扱い。
-        // scoreが0のときは何も選択されていない
-        if (score > 0 && (i === progress)) {
+        // 現在地（Totalで判定）
+        if (totalScore > 0 && (i === progress)) {
             sq.classList.add("current");
         }
 
