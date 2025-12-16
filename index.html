@@ -83,6 +83,7 @@
     <div id="timerOverlay" class="timer-overlay" style="display:none;">
         <div class="timer-content">
             <div id="timerDisplay" class="timer-display">10:00</div>
+            <div id="timerMessage" class="timer-message" style="display:none;">おしまい！</div>
             <div id="timerControlsOverlay" style="margin-top:20px;">
                 <button id="timerOverlayStartBtn" class="btn timer-control-btn"
                     style="display:none; background:#ff9800; color:#fff;">スタート</button>
@@ -92,6 +93,8 @@
                     style="display:none; background:#4caf50; color:#fff;">さいかい</button>
                 <button id="timerResetBtn" class="btn timer-control-btn"
                     style="background:#ef5350; color:#fff; margin-left:10px;">リセット</button>
+                <button id="timerStopSoundBtn" class="btn timer-control-btn timer-stop-btn"
+                    style="display:none; background:#d32f2f; color:#fff; font-weight:bold;">音をとめる</button>
             </div>
             <button id="timerCloseBtn" class="timer-close-btn">×</button>
         </div>

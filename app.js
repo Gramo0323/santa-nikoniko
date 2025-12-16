@@ -859,7 +859,7 @@ function updateAuthUI(session) {
 // Step 2: Timer Logic (Countdown)
 let timerDuration = 600; // default 10min
 // Step 3: State Management
-let timerStatus = 'idle'; // 'idle' | 'running' | 'paused' | 'finished'
+let timerStatus = 'idle'; // 'idle' | 'running' | 'paused' | 'finished' | 'finished_alarm'
 let tickTimerId = null;
 let endAtMs = 0;
 let remainingSec = 0; // Stored during pause
@@ -872,11 +872,16 @@ function setupTimer() {
     const closeBtn = document.getElementById("timerCloseBtn");
     const display = document.getElementById("timerDisplay");
 
+    // Step 4 Message
+    const timerMessage = document.getElementById("timerMessage");
+
     // Step 3 UI Controls
     const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
     const pauseBtn = document.getElementById("timerPauseBtn");
     const resumeBtn = document.getElementById("timerResumeBtn");
     const resetBtn = document.getElementById("timerResetBtn");
+    // Step 4 Control
+    const stopSoundBtn = document.getElementById("timerStopSoundBtn");
 
     if (!presetSelect || !startBtn || !overlay || !customInput) return;
 
@@ -909,28 +914,39 @@ function setupTimer() {
 
     // Helper: Update Control Visibility
     const updateControls = () => {
-        if (!overlayStartBtn || !pauseBtn || !resumeBtn || !resetBtn) return;
+        if (!overlayStartBtn || !pauseBtn || !resumeBtn || !resetBtn || !stopSoundBtn || !timerMessage || !closeBtn) return;
 
         // Default hidden
         overlayStartBtn.style.display = 'none';
         pauseBtn.style.display = 'none';
         resumeBtn.style.display = 'none';
-        resetBtn.style.display = 'block'; // Always visible in overlay
+        resetBtn.style.display = 'none'; // Changed default to none for cleaner logic below
+        stopSoundBtn.style.display = 'none';
+        timerMessage.style.display = 'none';
+        closeBtn.style.display = 'block'; // Default visible
 
         if (timerStatus === 'idle') {
             overlayStartBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
         } else if (timerStatus === 'running') {
             pauseBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
         } else if (timerStatus === 'paused') {
             resumeBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
         } else if (timerStatus === 'finished') {
-            // Maybe show Reset only? Or Start?
+            // Should not happen if we jump to finished_alarm, but for safety:
             overlayStartBtn.style.display = 'inline-block';
             overlayStartBtn.textContent = "もういちど";
-            resetBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
+        } else if (timerStatus === 'finished_alarm') {
+            // Step 4: Alarm State
+            stopSoundBtn.style.display = 'inline-block';
+            timerMessage.style.display = 'block';
+            closeBtn.style.display = 'none'; // Hide close button
         }
 
-        if (timerStatus !== 'finished') {
+        if (timerStatus !== 'finished' && timerStatus !== 'finished_alarm') {
             overlayStartBtn.textContent = "スタート";
         }
     };
@@ -1024,6 +1040,15 @@ function setupTimer() {
         });
     }
 
+    // Stop Sound (Step 4)
+    if (stopSoundBtn) {
+        stopSoundBtn.addEventListener("click", () => {
+            stopTimer(); // Sets idle
+            overlay.style.display = "none"; // Return to main screen
+            updateFromInput();
+        });
+    }
+
     // Close
     closeBtn.addEventListener("click", () => {
         stopTimer();
@@ -1032,9 +1057,7 @@ function setupTimer() {
     });
 
     // Initial control update when overlay is opened or page loaded
-    // This ensures correct button states if timer was running/paused before refresh
     updateControls();
-    // Also ensure display is correct on load
     updateFromInput();
 }
 
@@ -1044,6 +1067,11 @@ function stopTimer() {
         tickTimerId = null;
     }
     timerStatus = 'idle';
+    // Helper to force visible Close button if we stopped manually (e.g. from Alarm)
+    // Actually updateControls handles this if status is idle.
+    // However, if we just call stopTimer(), status becomes idle but UI not updated until explicit call.
+    // In event handlers above, we call updateControls().
+    // If called from elsewhere, might need explicit update.
 }
 
 function tick(displayEl) {
@@ -1057,31 +1085,27 @@ function tick(displayEl) {
         remainingSec = 0;
         clearInterval(tickTimerId);
         tickTimerId = null;
-        timerStatus = 'finished';
+        timerStatus = 'finished_alarm'; // Step 4: Alarm State
 
-        // Update UI controls to show "Finished" state (Start/Reset)
-        // We need to access updateControls... but it's inside setupTimer scope.
-        // Quick fix: Trigger a click or event? Or move helper out?
-        // Let's just update display here, and UI controls might lag until clicked?
-        // Better: Make updateControls accessible or just minimal handle here.
-        // Actually, the tick function is outside. 
-        // Let's rely on the fact that when finished, user sees 00:00.
-        // If they click "Reset", it handles properly.
-        // Ideally we update buttons too.
-        // Let's expose a global event or just re-query in tick? 
-        // Simple: Just update display. The buttons (Pause) will remain visible but ineffective until clicked?
-        // No, Pause button visible at 00:00 is weird.
-        // Let's do simple DOM hiding here since we know IDs.
+        // Setup timer helper inside tick is hard to access for updateControls() ref.
+        // We need updateControls() to run.
+        // Re-querying exact same way as setupTimer:
         const pauseBtn = document.getElementById("timerPauseBtn");
         const resumeBtn = document.getElementById("timerResumeBtn");
         const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+        const resetBtn = document.getElementById("timerResetBtn");
+        const stopSoundBtn = document.getElementById("timerStopSoundBtn");
+        const timerMessage = document.getElementById("timerMessage");
+        const closeBtn = document.getElementById("timerCloseBtn");
 
         if (pauseBtn) pauseBtn.style.display = 'none';
         if (resumeBtn) resumeBtn.style.display = 'none';
-        if (overlayStartBtn) {
-            overlayStartBtn.style.display = 'inline-block';
-            overlayStartBtn.textContent = "もういちど";
-        }
+        if (resetBtn) resetBtn.style.display = 'none';
+        if (overlayStartBtn) overlayStartBtn.style.display = 'none';
+
+        if (stopSoundBtn) stopSoundBtn.style.display = 'inline-block';
+        if (timerMessage) timerMessage.style.display = 'block';
+        if (closeBtn) closeBtn.style.display = 'none';
     }
 
     updateTimerDisplay(displayEl, remainingSec);
