@@ -449,3 +449,34 @@ h1 {
   vertical-align: middle;
   cursor: pointer;
 }
+
+/* Step 7: Stamp Navigation Highlight */
+.highlight-target {
+  animation: highlight-pulse 1.5s ease-out forwards;
+  position: relative;
+  z-index: 5;
+  border-radius: 8px;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    transform: scale(1);
+    background-color: rgba(76, 175, 80, 0.1);
+  }
+
+  30% {
+    transform: scale(1.02);
+    background-color: rgba(76, 175, 80, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 10px rgba(76, 175, 80, 0);
+    transform: scale(1.02);
+  }
+
+  100% {
+    transform: scale(1);
+    background-color: transparent;
+  }
+}

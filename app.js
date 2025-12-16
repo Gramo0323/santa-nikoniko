@@ -891,11 +891,14 @@ function setupTimer() {
     // Step 4 Control
     const stopSoundBtn = document.getElementById("timerStopSoundBtn");
 
+    // Step 7: Stamp CTA
+    const timerStampBtn = document.getElementById("timerStampBtn");
+
     // Step 5 Sound Controls
     const soundToggle = document.getElementById("timerSoundToggle");
     const volumeSlider = document.getElementById("timerVolume");
 
-    if (!presetSelect || !startBtn || !overlay || !customInput || !soundToggle || !volumeSlider) return;
+    if (!presetSelect || !startBtn || !overlay || !customInput || !soundToggle || !volumeSlider || !timerStampBtn) return;
 
     // Load Sound Settings
     const storedSound = localStorage.getItem("timer_sound_enabled");
@@ -971,6 +974,7 @@ function setupTimer() {
         stopSoundBtn.style.display = 'none';
         timerMessage.style.display = 'none';
         closeBtn.style.display = 'block'; // Default visible
+        if (timerStampBtn) timerStampBtn.style.display = 'none';
 
         if (timerStatus === 'idle') {
             overlayStartBtn.style.display = 'inline-block';
@@ -991,6 +995,9 @@ function setupTimer() {
             stopSoundBtn.style.display = 'inline-block';
             timerMessage.style.display = 'block';
             closeBtn.style.display = 'none'; // Hide close button
+
+            // Step 7: Show Stamp CTA
+            if (timerStampBtn) timerStampBtn.style.display = 'inline-block';
         }
 
         if (timerStatus !== 'finished' && timerStatus !== 'finished_alarm') {
@@ -1098,6 +1105,16 @@ function setupTimer() {
         });
     }
 
+    // Step 7: Stamp CTA
+    if (timerStampBtn) {
+        timerStampBtn.addEventListener("click", () => {
+            stopTimer(); // 1. Stop sound/timer
+            overlay.style.display = "none"; // 2. Hide overlay
+            updateFromInput();
+            scrollToTodayAndHighlight(); // 3. Jump to today
+        });
+    }
+
     // Close
     closeBtn.addEventListener("click", () => {
         stopTimer();
@@ -1108,6 +1125,46 @@ function setupTimer() {
     // Initial control update when overlay is opened or page loaded
     updateControls();
     updateFromInput();
+}
+
+// Step 7 Helper
+function scrollToTodayAndHighlight() {
+    const todayKey = formatDateKey(new Date());
+    // Find the element with class 'today-highlight'
+    const todayEl = document.querySelector(".today-highlight");
+
+    if (!todayEl) {
+        console.log("Today element not found (maybe out of range)");
+        return;
+    }
+
+    // Scroll
+    todayEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Determine target to highlight
+    const todayData = appState[todayKey] || {};
+    let targetEl = null;
+
+    if (!todayData[1]) {
+        // 1st empty
+        const btn = todayEl.querySelector('button[data-time="1"]');
+        if (btn) targetEl = btn.closest('.row');
+    } else if (!todayData[2]) {
+        // 2nd empty
+        const btn = todayEl.querySelector('button[data-time="2"]');
+        if (btn) targetEl = btn.closest('.row');
+    } else {
+        // Both full -> highlight whole card
+        targetEl = todayEl;
+    }
+
+    if (targetEl) {
+        targetEl.classList.add("highlight-target");
+        // Remove class after animation (1.5s)
+        setTimeout(() => {
+            targetEl.classList.remove("highlight-target");
+        }, 1500);
+    }
 }
 
 function stopTimer() {
