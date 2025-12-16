@@ -856,8 +856,11 @@ function updateAuthUI(session) {
     }
 }
 
-// Step 1: Timer Logic
+// Step 2: Timer Logic (Countdown)
 let timerDuration = 600; // default 10min
+let timerStatus = 'idle'; // 'idle' | 'running' | 'finished'
+let tickTimerId = null;
+let endAtMs = 0;
 
 function setupTimer() {
     const presetSelect = document.getElementById("timerPreset");
@@ -872,18 +875,59 @@ function setupTimer() {
     presetSelect.addEventListener("change", (e) => {
         timerDuration = parseInt(e.target.value, 10);
         updateTimerDisplay(display, timerDuration);
+        // If changing preset while running, do we stop? 
+        // Spec implies existing behavior (just presets). Step 2 requirement says: 
+        // "start" uses "current selected duration". 
+        // We shouldn't probably auto-stop if just changing dropdown, but usually you'd want to.
+        // For minimal diff, we leave status alone until Start is clicked.
     });
 
     // Start
     startBtn.addEventListener("click", () => {
+        // Stop existing if any (Requirement D)
+        stopTimer();
+
+        // Setup for start
+        endAtMs = Date.now() + timerDuration * 1000;
+        timerStatus = 'running';
+
+        // Immediate update
         updateTimerDisplay(display, timerDuration);
         overlay.style.display = "flex";
+
+        // Start interval
+        tickTimerId = setInterval(() => tick(display), 200);
     });
 
     // Close
     closeBtn.addEventListener("click", () => {
+        // Requirement E: Stop and reset
+        stopTimer();
         overlay.style.display = "none";
+        // Reset display to selection
+        updateTimerDisplay(display, timerDuration);
     });
+}
+
+function stopTimer() {
+    if (tickTimerId) {
+        clearInterval(tickTimerId);
+        tickTimerId = null;
+    }
+    timerStatus = 'idle';
+}
+
+function tick(displayEl) {
+    const now = Date.now();
+    let remaining = Math.ceil((endAtMs - now) / 1000);
+
+    if (remaining <= 0) {
+        remaining = 0;
+        stopTimer();
+        timerStatus = 'finished';
+    }
+
+    updateTimerDisplay(displayEl, remaining);
 }
 
 function updateTimerDisplay(el, seconds) {
