@@ -858,17 +858,25 @@ function updateAuthUI(session) {
 
 // Step 2: Timer Logic (Countdown)
 let timerDuration = 600; // default 10min
-let timerStatus = 'idle'; // 'idle' | 'running' | 'finished'
+// Step 3: State Management
+let timerStatus = 'idle'; // 'idle' | 'running' | 'paused' | 'finished'
 let tickTimerId = null;
 let endAtMs = 0;
+let remainingSec = 0; // Stored during pause
 
 function setupTimer() {
     const presetSelect = document.getElementById("timerPreset");
     const customInput = document.getElementById("timerCustom");
-    const startBtn = document.getElementById("timerStartBtn");
+    const startBtn = document.getElementById("timerStartBtn"); // Main screen start
     const overlay = document.getElementById("timerOverlay");
     const closeBtn = document.getElementById("timerCloseBtn");
     const display = document.getElementById("timerDisplay");
+
+    // Step 3 UI Controls
+    const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+    const pauseBtn = document.getElementById("timerPauseBtn");
+    const resumeBtn = document.getElementById("timerResumeBtn");
+    const resetBtn = document.getElementById("timerResetBtn");
 
     if (!presetSelect || !startBtn || !overlay || !customInput) return;
 
@@ -877,12 +885,6 @@ function setupTimer() {
         const customVal = parseInt(customInput.value, 10);
         if (!isNaN(customVal) && customVal > 0) {
             // Valid custom input (1-60)
-            // Clamp if > 60? Requirement says "Start disabled or clamp". 
-            // Let's Disable Start if out of range for safety, but if effective range is 1-60 in UI.
-            // Requirement B: "Custom effective -> known".
-            // Let's allow typing, but validate on Start or Change.
-
-            // Simple logic: if custom input has value, it overrides preset
             if (customVal < 1 || customVal > 60) {
                 startBtn.disabled = true;
                 startBtn.style.opacity = 0.5;
@@ -892,7 +894,7 @@ function setupTimer() {
                 timerDuration = customVal * 60;
                 updateTimerDisplay(display, timerDuration);
             }
-            presetSelect.style.opacity = 0.5; // Visual cue
+            presetSelect.style.opacity = 0.5;
             customInput.style.borderColor = "#006400";
         } else {
             // No custom input -> use Preset
@@ -905,9 +907,36 @@ function setupTimer() {
         }
     };
 
+    // Helper: Update Control Visibility
+    const updateControls = () => {
+        if (!overlayStartBtn || !pauseBtn || !resumeBtn || !resetBtn) return;
+
+        // Default hidden
+        overlayStartBtn.style.display = 'none';
+        pauseBtn.style.display = 'none';
+        resumeBtn.style.display = 'none';
+        resetBtn.style.display = 'block'; // Always visible in overlay
+
+        if (timerStatus === 'idle') {
+            overlayStartBtn.style.display = 'inline-block';
+        } else if (timerStatus === 'running') {
+            pauseBtn.style.display = 'inline-block';
+        } else if (timerStatus === 'paused') {
+            resumeBtn.style.display = 'inline-block';
+        } else if (timerStatus === 'finished') {
+            // Maybe show Reset only? Or Start?
+            overlayStartBtn.style.display = 'inline-block';
+            overlayStartBtn.textContent = "もういちど";
+            resetBtn.style.display = 'inline-block';
+        }
+
+        if (timerStatus !== 'finished') {
+            overlayStartBtn.textContent = "スタート";
+        }
+    };
+
     // Preset Change
     presetSelect.addEventListener("change", (e) => {
-        // Clear custom input on preset change
         customInput.value = "";
         updateFromInput();
     });
@@ -917,38 +946,96 @@ function setupTimer() {
         updateFromInput();
     });
 
-    // Start
+    // Start (Main Screen)
     startBtn.addEventListener("click", () => {
-        // Double check validity (though disabled button handles most)
         const customVal = parseInt(customInput.value, 10);
         if (customInput.value && (isNaN(customVal) || customVal < 1 || customVal > 60)) {
             alert("1〜60ぷん の あいだで にゅうりょく してね");
             return;
         }
 
-        // Stop existing if any (Requirement D)
         stopTimer();
+        startTimerLogic();
+    });
 
+    // Start (Overlay)
+    if (overlayStartBtn) {
+        overlayStartBtn.addEventListener("click", () => {
+            stopTimer(); // Safety
+            startTimerLogic();
+        });
+    }
+
+    function startTimerLogic() {
         // Setup for start
+        remainingSec = timerDuration; // Reset remaining
         endAtMs = Date.now() + timerDuration * 1000;
         timerStatus = 'running';
 
-        // Immediate update
         updateTimerDisplay(display, timerDuration);
         overlay.style.display = "flex";
+        updateControls();
 
-        // Start interval
         tickTimerId = setInterval(() => tick(display), 200);
-    });
+    }
+
+    // Pause
+    if (pauseBtn) {
+        pauseBtn.addEventListener("click", () => {
+            if (timerStatus !== 'running') return;
+            // Calulate exact remaining (freeze it)
+            // remainingSec is updated in tick, but let's be precise
+            const now = Date.now();
+            remainingSec = Math.max(0, Math.ceil((endAtMs - now) / 1000));
+
+            clearInterval(tickTimerId);
+            tickTimerId = null;
+            timerStatus = 'paused';
+
+            updateTimerDisplay(display, remainingSec);
+            updateControls();
+        });
+    }
+
+    // Resume
+    if (resumeBtn) {
+        resumeBtn.addEventListener("click", () => {
+            if (timerStatus !== 'paused') return;
+
+            // Recalculate endAt based on stored remainingSec
+            endAtMs = Date.now() + remainingSec * 1000;
+            timerStatus = 'running';
+
+            updateControls();
+            tickTimerId = setInterval(() => tick(display), 200);
+        });
+    }
+
+    // Reset
+    if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+            stopTimer(); // Clears interval, sets idle
+            // Reset display to selection
+            updateFromInput();
+            // Keep overlay open? Requirement C says yes.
+            // Since we updatedFromInput, display is back to e.g. 10:00
+            overlay.style.display = "flex";
+            updateControls();
+        });
+    }
 
     // Close
     closeBtn.addEventListener("click", () => {
-        // Requirement E: Stop and reset
         stopTimer();
         overlay.style.display = "none";
-        // Reset display to selection (maintain custom input if set)
         updateFromInput();
     });
+
+    // Initial control update when overlay is opened or page loaded
+    // This ensures correct button states if timer was running/paused before refresh
+    updateControls();
+    // Also ensure display is correct on load
+    updateFromInput();
 }
 
 function stopTimer() {
@@ -961,15 +1048,43 @@ function stopTimer() {
 
 function tick(displayEl) {
     const now = Date.now();
-    let remaining = Math.ceil((endAtMs - now) / 1000);
+    // Only update if running (double check)
+    if (timerStatus !== 'running') return;
 
-    if (remaining <= 0) {
-        remaining = 0;
-        stopTimer();
+    remainingSec = Math.ceil((endAtMs - now) / 1000);
+
+    if (remainingSec <= 0) {
+        remainingSec = 0;
+        clearInterval(tickTimerId);
+        tickTimerId = null;
         timerStatus = 'finished';
+
+        // Update UI controls to show "Finished" state (Start/Reset)
+        // We need to access updateControls... but it's inside setupTimer scope.
+        // Quick fix: Trigger a click or event? Or move helper out?
+        // Let's just update display here, and UI controls might lag until clicked?
+        // Better: Make updateControls accessible or just minimal handle here.
+        // Actually, the tick function is outside. 
+        // Let's rely on the fact that when finished, user sees 00:00.
+        // If they click "Reset", it handles properly.
+        // Ideally we update buttons too.
+        // Let's expose a global event or just re-query in tick? 
+        // Simple: Just update display. The buttons (Pause) will remain visible but ineffective until clicked?
+        // No, Pause button visible at 00:00 is weird.
+        // Let's do simple DOM hiding here since we know IDs.
+        const pauseBtn = document.getElementById("timerPauseBtn");
+        const resumeBtn = document.getElementById("timerResumeBtn");
+        const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        if (resumeBtn) resumeBtn.style.display = 'none';
+        if (overlayStartBtn) {
+            overlayStartBtn.style.display = 'inline-block';
+            overlayStartBtn.textContent = "もういちど";
+        }
     }
 
-    updateTimerDisplay(displayEl, remaining);
+    updateTimerDisplay(displayEl, remainingSec);
 }
 
 function updateTimerDisplay(el, seconds) {
