@@ -864,6 +864,14 @@ let tickTimerId = null;
 let endAtMs = 0;
 let remainingSec = 0; // Stored during pause
 
+// Step 5: Web Audio API & Sound Settings
+let soundEnabled = true; // Default
+let soundVolume = 0.5;   // Default 50%
+let audioCtx = null;
+let masterGain = null;
+let alarmOscillator = null;
+let alarmIntervalId = null;
+
 function setupTimer() {
     const presetSelect = document.getElementById("timerPreset");
     const customInput = document.getElementById("timerCustom");
@@ -883,7 +891,49 @@ function setupTimer() {
     // Step 4 Control
     const stopSoundBtn = document.getElementById("timerStopSoundBtn");
 
-    if (!presetSelect || !startBtn || !overlay || !customInput) return;
+    // Step 5 Sound Controls
+    const soundToggle = document.getElementById("timerSoundToggle");
+    const volumeSlider = document.getElementById("timerVolume");
+
+    if (!presetSelect || !startBtn || !overlay || !customInput || !soundToggle || !volumeSlider) return;
+
+    // Load Sound Settings
+    const storedSound = localStorage.getItem("timer_sound_enabled");
+    if (storedSound !== null) soundEnabled = storedSound === "1";
+
+    const storedVolume = localStorage.getItem("timer_sound_volume");
+    if (storedVolume !== null) soundVolume = parseFloat(storedVolume);
+
+    // Apply init settings to UI
+    soundToggle.checked = soundEnabled;
+    volumeSlider.value = Math.floor(soundVolume * 100);
+
+    // Sound Control Listeners
+    soundToggle.addEventListener("change", (e) => {
+        soundEnabled = e.target.checked;
+        localStorage.setItem("timer_sound_enabled", soundEnabled ? "1" : "0");
+        // If alarm running, updating logic might be complex if loop relies on settings.
+        // Step 5C: startAlarmSound checks soundEnabled. 
+        // If we toggle OFF while ringing, Requirement says "Sound stops (or mutes)".
+        if (!soundEnabled && timerStatus === 'finished_alarm') {
+            stopAlarmSound(); // Actually stop it completely?
+            // Or just mute? Requirement says "stop stopAlarmSound isn't called, but maybe mute".
+            // Let's call stopAlarmSound() if we just want silence, but stay in alarm screen.
+            // But wait, stopAlarmSound clears the interval.
+            // If toggle off, we can just set gain to 0 if we implement dynamic gain update.
+            // Simplest: If ringing, and turn off, stop sound playback but keep screen.
+            if (alarmOscillator) stopAlarmPlayback(); // Just stop the noise
+        }
+    });
+
+    volumeSlider.addEventListener("input", (e) => {
+        soundVolume = parseInt(e.target.value, 10) / 100;
+        localStorage.setItem("timer_sound_volume", soundVolume.toFixed(2));
+        // Update live volume
+        if (masterGain) {
+            masterGain.gain.setValueAtTime(soundVolume, audioCtx.currentTime);
+        }
+    });
 
     // Helper: Update duration based on active input
     const updateFromInput = () => {
@@ -970,6 +1020,7 @@ function setupTimer() {
             return;
         }
 
+        ensureAudioUnlocked(); // Unlock Audio
         stopTimer();
         startTimerLogic();
     });
@@ -977,6 +1028,7 @@ function setupTimer() {
     // Start (Overlay)
     if (overlayStartBtn) {
         overlayStartBtn.addEventListener("click", () => {
+            ensureAudioUnlocked(); // Unlock Audio
             stopTimer(); // Safety
             startTimerLogic();
         });
@@ -1043,7 +1095,7 @@ function setupTimer() {
     // Stop Sound (Step 4)
     if (stopSoundBtn) {
         stopSoundBtn.addEventListener("click", () => {
-            stopTimer(); // Sets idle
+            stopTimer(); // Sets idle (and stops alarm)
             overlay.style.display = "none"; // Return to main screen
             updateFromInput();
         });
@@ -1066,6 +1118,7 @@ function stopTimer() {
         clearInterval(tickTimerId);
         tickTimerId = null;
     }
+    stopAlarmSound(); // Step 5: Stop alarm if running
     timerStatus = 'idle';
     // Helper to force visible Close button if we stopped manually (e.g. from Alarm)
     // Actually updateControls handles this if status is idle.
@@ -1086,6 +1139,8 @@ function tick(displayEl) {
         clearInterval(tickTimerId);
         tickTimerId = null;
         timerStatus = 'finished_alarm'; // Step 4: Alarm State
+
+        startAlarmSound(); // Step 5: Start Alarm
 
         // Setup timer helper inside tick is hard to access for updateControls() ref.
         // We need updateControls() to run.
@@ -1109,6 +1164,98 @@ function tick(displayEl) {
     }
 
     updateTimerDisplay(displayEl, remainingSec);
+}
+
+// Step 5: Web Audio Functions
+function ensureAudioUnlocked() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    // Update gain in case it wasn't set (or reset on creation)
+    if (masterGain) {
+        masterGain.gain.setValueAtTime(soundVolume, audioCtx.currentTime);
+    }
+}
+
+function startAlarmSound() {
+    // Check if enabled
+    if (!soundEnabled || soundVolume <= 0) {
+        console.log("Alarm silent (disabled or volume 0)");
+        return;
+    }
+
+    // Prevent double start
+    if (alarmIntervalId || alarmOscillator) return;
+
+    ensureAudioUnlocked();
+
+    // Loop beep function
+    const playBeep = () => {
+        if (!audioCtx || !masterGain) return;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain(); // Local envelope gain
+
+        osc.connect(gain);
+        gain.connect(masterGain);
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // Drop pitch
+
+        // Envelope
+        gain.gain.setValueAtTime(0, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.5);
+
+        // Tracking for cleanup if needed? For short beeps, fire-and-forget is usually ok
+        // but we might want to stop mid-beep. 
+        // For simplicity, we just stop the interval loop.
+        // The masterGain controls volume anyway.
+    };
+
+    // Play immediately
+    playBeep();
+    // Repeat every 1s
+    alarmIntervalId = setInterval(playBeep, 1000);
+}
+
+function stopAlarmSound() {
+    if (alarmIntervalId) {
+        clearInterval(alarmIntervalId);
+        alarmIntervalId = null;
+    }
+    stopAlarmPlayback(); // Stop any currently playing continuous sound
+}
+
+function stopAlarmPlayback() {
+    // If we were using a continuous oscillator, we'd stop it here.
+    // Since we use fire-and-forget loops, we rely on clearing interval.
+    // However, if we want to silence immediately:
+    if (masterGain && audioCtx) {
+        // Ramp down master volume quickly to avoid click
+        masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+
+        // We need to restore volume for next time though!
+        // So better: Master gain logic is strictly volume control.
+        // We should just stop scheduling new beeps (which clearInterval does).
+        // The current beep (0.5s) will finish. That is acceptable.
+
+        // BUT if user toggles "Sound Off", we wanted silence.
+        // So yes, ramp down is good, but then we need `startAlarmSound` to reset it.
+        // Or simpler: don't touch masterGain here, just let the beep finish.
+        // It's only 0.5s.
+    }
 }
 
 function updateTimerDisplay(el, seconds) {

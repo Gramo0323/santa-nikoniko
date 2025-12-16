@@ -31,6 +31,14 @@
             <span style="font-size:0.8rem; margin-left:8px;">カスタム:</span>
             <input id="timerCustom" type="number" min="1" max="60" placeholder="ふん" class="btn"
                 style="width:50px; padding:10px 4px; text-align:center;">
+
+            <!-- Step 5: Sound Controls -->
+            <div style="display:inline-flex; align-items:center; margin-left:10px; font-size:0.8rem;">
+                <label style="cursor:pointer; margin-right:5px;">
+                    <input type="checkbox" id="timerSoundToggle" checked> 音
+                </label>
+                <input type="range" id="timerVolume" min="0" max="100" value="50" style="width:60px;">
+            </div>
         </div>
     </header>
 
