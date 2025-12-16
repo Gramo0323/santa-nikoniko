@@ -20,6 +20,26 @@
         </div>
         <button id="resetBtn" class="btn">ぜんぶ けす</button>
         <button id="soundToggleBtn" class="btn" style="margin-left:8px;">♪ 音:ON</button>
+        <div id="timerControls" style="display:inline-block; margin-left:8px;">
+            <select id="timerPreset" class="btn" style="padding: 10px 4px; font-size:0.9rem;">
+                <option value="300">5ふん</option>
+                <option value="600" selected>10ぷん</option>
+                <option value="900">15ふん</option>
+            </select>
+            <button id="timerStartBtn" class="btn"
+                style="background:#ff9800; color:#fff; border:none; font-weight:bold;">スタート</button>
+            <span style="font-size:0.8rem; margin-left:8px;">カスタム:</span>
+            <input id="timerCustom" type="number" min="1" max="60" placeholder="ふん" class="btn"
+                style="width:50px; padding:10px 4px; text-align:center;">
+
+            <!-- Step 5: Sound Controls -->
+            <div style="display:inline-flex; align-items:center; margin-left:10px; font-size:0.8rem;">
+                <label style="cursor:pointer; margin-right:5px;">
+                    <input type="checkbox" id="timerSoundToggle" checked> 音
+                </label>
+                <input type="range" id="timerVolume" min="0" max="100" value="50" style="width:60px;">
+            </div>
+        </div>
     </header>
 
     <div id="statusArea" class="wrap"
@@ -65,6 +85,29 @@
     <div id="bonusOverlay" class="bonus-overlay">
         <div>+1 ボーナス！</div>
         <div style="font-size: 3rem; margin-top:10px;">🎉</div>
+    </div>
+
+    <!-- Step 1: Timer Overlay Shell -->
+    <div id="timerOverlay" class="timer-overlay" style="display:none;">
+        <div class="timer-content">
+            <div id="timerDisplay" class="timer-display">10:00</div>
+            <div id="timerMessage" class="timer-message" style="display:none;">おしまい！</div>
+            <div id="timerControlsOverlay" style="margin-top:20px;">
+                <button id="timerOverlayStartBtn" class="btn timer-control-btn"
+                    style="display:none; background:#ff9800; color:#fff;">スタート</button>
+                <button id="timerPauseBtn" class="btn timer-control-btn"
+                    style="display:none; background:#fbc02d; color:#fff;">いちじ ていし</button>
+                <button id="timerResumeBtn" class="btn timer-control-btn"
+                    style="display:none; background:#4caf50; color:#fff;">さいかい</button>
+                <button id="timerResetBtn" class="btn timer-control-btn"
+                    style="background:#ef5350; color:#fff; margin-left:10px;">リセット</button>
+                <button id="timerStopSoundBtn" class="btn timer-control-btn timer-stop-btn"
+                    style="display:none; background:#d32f2f; color:#fff; font-weight:bold;">音をとめる</button>
+                <button id="timerStampBtn" class="btn timer-control-btn"
+                    style="display:none; background:#4caf50; color:#fff; border:2px solid #fff; margin-left:10px; font-weight:bold;">スタンプをつける</button>
+            </div>
+            <button id="timerCloseBtn" class="timer-close-btn">×</button>
+        </div>
     </div>
 </body>
 

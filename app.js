@@ -855,3 +855,475 @@ function updateAuthUI(session) {
         loadData();
     }
 }
+
+// Step 2: Timer Logic (Countdown)
+let timerDuration = 600; // default 10min
+// Step 3: State Management
+let timerStatus = 'idle'; // 'idle' | 'running' | 'paused' | 'finished' | 'finished_alarm'
+let tickTimerId = null;
+let endAtMs = 0;
+let remainingSec = 0; // Stored during pause
+
+// Step 5: Web Audio API & Sound Settings
+let soundEnabled = true; // Default
+let soundVolume = 0.5;   // Default 50%
+let audioCtx = null;
+let masterGain = null;
+let alarmOscillator = null;
+let alarmIntervalId = null;
+
+function setupTimer() {
+    const presetSelect = document.getElementById("timerPreset");
+    const customInput = document.getElementById("timerCustom");
+    const startBtn = document.getElementById("timerStartBtn"); // Main screen start
+    const overlay = document.getElementById("timerOverlay");
+    const closeBtn = document.getElementById("timerCloseBtn");
+    const display = document.getElementById("timerDisplay");
+
+    // Step 4 Message
+    const timerMessage = document.getElementById("timerMessage");
+
+    // Step 3 UI Controls
+    const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+    const pauseBtn = document.getElementById("timerPauseBtn");
+    const resumeBtn = document.getElementById("timerResumeBtn");
+    const resetBtn = document.getElementById("timerResetBtn");
+    // Step 4 Control
+    const stopSoundBtn = document.getElementById("timerStopSoundBtn");
+
+    // Step 7: Stamp CTA
+    const timerStampBtn = document.getElementById("timerStampBtn");
+
+    // Step 5 Sound Controls
+    const soundToggle = document.getElementById("timerSoundToggle");
+    const volumeSlider = document.getElementById("timerVolume");
+
+    if (!presetSelect || !startBtn || !overlay || !customInput || !soundToggle || !volumeSlider || !timerStampBtn) return;
+
+    // Load Sound Settings
+    const storedSound = localStorage.getItem("timer_sound_enabled");
+    if (storedSound !== null) soundEnabled = storedSound === "1";
+
+    const storedVolume = localStorage.getItem("timer_sound_volume");
+    if (storedVolume !== null) soundVolume = parseFloat(storedVolume);
+
+    // Apply init settings to UI
+    soundToggle.checked = soundEnabled;
+    volumeSlider.value = Math.floor(soundVolume * 100);
+
+    // Sound Control Listeners
+    soundToggle.addEventListener("change", (e) => {
+        soundEnabled = e.target.checked;
+        localStorage.setItem("timer_sound_enabled", soundEnabled ? "1" : "0");
+
+        // If alarm is currently active (UI is in alarm mode), toggle sound immediately
+        if (timerStatus === 'finished_alarm') {
+            if (soundEnabled) {
+                startAlarmSound();
+            } else {
+                stopAlarmSound();
+            }
+        }
+    });
+
+    volumeSlider.addEventListener("input", (e) => {
+        soundVolume = parseInt(e.target.value, 10) / 100;
+        localStorage.setItem("timer_sound_volume", soundVolume.toFixed(2));
+        // Update live volume
+        if (masterGain) {
+            masterGain.gain.setValueAtTime(soundVolume, audioCtx.currentTime);
+        }
+    });
+
+    // Helper: Update duration based on active input
+    const updateFromInput = () => {
+        const customVal = parseInt(customInput.value, 10);
+        if (!isNaN(customVal) && customVal > 0) {
+            // Valid custom input (1-60)
+            if (customVal < 1 || customVal > 60) {
+                startBtn.disabled = true;
+                startBtn.style.opacity = 0.5;
+            } else {
+                startBtn.disabled = false;
+                startBtn.style.opacity = 1.0;
+                timerDuration = customVal * 60;
+                updateTimerDisplay(display, timerDuration);
+            }
+            presetSelect.style.opacity = 0.5;
+            customInput.style.borderColor = "#006400";
+        } else {
+            // No custom input -> use Preset
+            startBtn.disabled = false;
+            startBtn.style.opacity = 1.0;
+            timerDuration = parseInt(presetSelect.value, 10);
+            updateTimerDisplay(display, timerDuration);
+            presetSelect.style.opacity = 1.0;
+            customInput.style.borderColor = "#ccc";
+        }
+    };
+
+    // Helper: Update Control Visibility
+    const updateControls = () => {
+        if (!overlayStartBtn || !pauseBtn || !resumeBtn || !resetBtn || !stopSoundBtn || !timerMessage || !closeBtn) return;
+
+        // Default hidden
+        overlayStartBtn.style.display = 'none';
+        pauseBtn.style.display = 'none';
+        resumeBtn.style.display = 'none';
+        resetBtn.style.display = 'none'; // Changed default to none for cleaner logic below
+        stopSoundBtn.style.display = 'none';
+        timerMessage.style.display = 'none';
+        closeBtn.style.display = 'block'; // Default visible
+        if (timerStampBtn) timerStampBtn.style.display = 'none';
+
+        if (timerStatus === 'idle') {
+            overlayStartBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
+        } else if (timerStatus === 'running') {
+            pauseBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
+        } else if (timerStatus === 'paused') {
+            resumeBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'block';
+        } else if (timerStatus === 'finished') {
+            // Should not happen if we jump to finished_alarm, but for safety:
+            overlayStartBtn.style.display = 'inline-block';
+            overlayStartBtn.textContent = "もういちど";
+            resetBtn.style.display = 'block';
+        } else if (timerStatus === 'finished_alarm') {
+            // Step 4: Alarm State
+            stopSoundBtn.style.display = 'inline-block';
+            timerMessage.style.display = 'block';
+            closeBtn.style.display = 'none'; // Hide close button
+
+            // Step 7: Show Stamp CTA
+            if (timerStampBtn) timerStampBtn.style.display = 'inline-block';
+        }
+
+        if (timerStatus !== 'finished' && timerStatus !== 'finished_alarm') {
+            overlayStartBtn.textContent = "スタート";
+        }
+    };
+
+    // Preset Change
+    presetSelect.addEventListener("change", (e) => {
+        customInput.value = "";
+        updateFromInput();
+    });
+
+    // Custom Input Change
+    customInput.addEventListener("input", (e) => {
+        updateFromInput();
+    });
+
+    // Start (Main Screen)
+    startBtn.addEventListener("click", () => {
+        const customVal = parseInt(customInput.value, 10);
+        if (customInput.value && (isNaN(customVal) || customVal < 1 || customVal > 60)) {
+            alert("1〜60ぷん の あいだで にゅうりょく してね");
+            return;
+        }
+
+        ensureAudioUnlocked(); // Unlock Audio
+        stopTimer();
+        startTimerLogic();
+    });
+
+    // Start (Overlay)
+    if (overlayStartBtn) {
+        overlayStartBtn.addEventListener("click", () => {
+            ensureAudioUnlocked(); // Unlock Audio
+            stopTimer(); // Safety
+            startTimerLogic();
+        });
+    }
+
+    function startTimerLogic() {
+        // Setup for start
+        remainingSec = timerDuration; // Reset remaining
+        endAtMs = Date.now() + timerDuration * 1000;
+        timerStatus = 'running';
+
+        updateTimerDisplay(display, timerDuration);
+        overlay.style.display = "flex";
+        updateControls();
+
+        tickTimerId = setInterval(() => tick(display), 200);
+    }
+
+    // Pause
+    if (pauseBtn) {
+        pauseBtn.addEventListener("click", () => {
+            if (timerStatus !== 'running') return;
+            // Calulate exact remaining (freeze it)
+            // remainingSec is updated in tick, but let's be precise
+            const now = Date.now();
+            remainingSec = Math.max(0, Math.ceil((endAtMs - now) / 1000));
+
+            clearInterval(tickTimerId);
+            tickTimerId = null;
+            timerStatus = 'paused';
+
+            updateTimerDisplay(display, remainingSec);
+            updateControls();
+        });
+    }
+
+    // Resume
+    if (resumeBtn) {
+        resumeBtn.addEventListener("click", () => {
+            if (timerStatus !== 'paused') return;
+
+            // Recalculate endAt based on stored remainingSec
+            endAtMs = Date.now() + remainingSec * 1000;
+            timerStatus = 'running';
+
+            updateControls();
+            tickTimerId = setInterval(() => tick(display), 200);
+        });
+    }
+
+    // Reset
+    if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+            stopTimer(); // Clears interval, sets idle
+            // Reset display to selection
+            updateFromInput();
+            // Keep overlay open? Requirement C says yes.
+            // Since we updatedFromInput, display is back to e.g. 10:00
+            overlay.style.display = "flex";
+            updateControls();
+        });
+    }
+
+    // Stop Sound (Step 4)
+    if (stopSoundBtn) {
+        stopSoundBtn.addEventListener("click", () => {
+            stopTimer(); // Sets idle (and stops alarm)
+            overlay.style.display = "none"; // Return to main screen
+            updateFromInput();
+        });
+    }
+
+    // Step 7: Stamp CTA
+    if (timerStampBtn) {
+        timerStampBtn.addEventListener("click", () => {
+            stopTimer(); // 1. Stop sound/timer
+            overlay.style.display = "none"; // 2. Hide overlay
+            updateFromInput();
+            scrollToTodayAndHighlight(); // 3. Jump to today
+        });
+    }
+
+    // Close
+    closeBtn.addEventListener("click", () => {
+        stopTimer();
+        overlay.style.display = "none";
+        updateFromInput();
+    });
+
+    // Initial control update when overlay is opened or page loaded
+    updateControls();
+    updateFromInput();
+}
+
+// Step 7 Helper
+function scrollToTodayAndHighlight() {
+    const todayKey = formatDateKey(new Date());
+    // Find the element with class 'today-highlight'
+    const todayEl = document.querySelector(".today-highlight");
+
+    if (!todayEl) {
+        console.log("Today element not found (maybe out of range)");
+        return;
+    }
+
+    // Scroll
+    todayEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Determine target to highlight
+    const todayData = appState[todayKey] || {};
+    let targetEl = null;
+
+    if (!todayData[1]) {
+        // 1st empty
+        const btn = todayEl.querySelector('button[data-time="1"]');
+        if (btn) targetEl = btn.closest('.row');
+    } else if (!todayData[2]) {
+        // 2nd empty
+        const btn = todayEl.querySelector('button[data-time="2"]');
+        if (btn) targetEl = btn.closest('.row');
+    } else {
+        // Both full -> highlight whole card
+        targetEl = todayEl;
+    }
+
+    if (targetEl) {
+        targetEl.classList.add("highlight-target");
+        // Remove class after animation (1.5s)
+        setTimeout(() => {
+            targetEl.classList.remove("highlight-target");
+        }, 1500);
+    }
+}
+
+function stopTimer() {
+    if (tickTimerId) {
+        clearInterval(tickTimerId);
+        tickTimerId = null;
+    }
+    stopAlarmSound(); // Step 5: Stop alarm if running
+    timerStatus = 'idle';
+    // Helper to force visible Close button if we stopped manually (e.g. from Alarm)
+    // Actually updateControls handles this if status is idle.
+    // However, if we just call stopTimer(), status becomes idle but UI not updated until explicit call.
+    // In event handlers above, we call updateControls().
+    // If called from elsewhere, might need explicit update.
+}
+
+function tick(displayEl) {
+    const now = Date.now();
+    // Only update if running (double check)
+    if (timerStatus !== 'running') return;
+
+    remainingSec = Math.ceil((endAtMs - now) / 1000);
+
+    if (remainingSec <= 0) {
+        remainingSec = 0;
+        clearInterval(tickTimerId);
+        tickTimerId = null;
+        timerStatus = 'finished_alarm'; // Step 4: Alarm State
+
+        startAlarmSound(); // Step 5: Start Alarm
+
+        // Setup timer helper inside tick is hard to access for updateControls() ref.
+        // We need updateControls() to run.
+        // Re-querying exact same way as setupTimer:
+        const pauseBtn = document.getElementById("timerPauseBtn");
+        const resumeBtn = document.getElementById("timerResumeBtn");
+        const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+        const resetBtn = document.getElementById("timerResetBtn");
+        const stopSoundBtn = document.getElementById("timerStopSoundBtn");
+        const timerMessage = document.getElementById("timerMessage");
+        const closeBtn = document.getElementById("timerCloseBtn");
+
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        if (resumeBtn) resumeBtn.style.display = 'none';
+        if (resetBtn) resetBtn.style.display = 'none';
+        if (overlayStartBtn) overlayStartBtn.style.display = 'none';
+
+        if (stopSoundBtn) stopSoundBtn.style.display = 'inline-block';
+        if (timerMessage) timerMessage.style.display = 'block';
+        if (closeBtn) closeBtn.style.display = 'none';
+    }
+
+    updateTimerDisplay(displayEl, remainingSec);
+}
+
+// Step 5: Web Audio Functions
+function ensureAudioUnlocked() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    // Update gain in case it wasn't set (or reset on creation)
+    if (masterGain) {
+        masterGain.gain.setValueAtTime(soundVolume, audioCtx.currentTime);
+    }
+}
+
+function startAlarmSound() {
+    // Check if enabled
+    if (!soundEnabled || soundVolume <= 0) {
+        console.log("Alarm silent (disabled or volume 0)");
+        return;
+    }
+
+    // Prevent double start
+    if (alarmIntervalId) return;
+
+    ensureAudioUnlocked();
+
+    // Loop sparkle function (Step 6)
+    const playSparkle = () => {
+        if (!audioCtx || !masterGain) return;
+        const now = audioCtx.currentTime;
+
+        // Sparkle Arpeggio: A4 -> C#5 -> E5 -> A5 (Kirakira Rising)
+        // Adjust keys for child-friendly gentle sound
+        // Let's use: C5(523), E5(659), G5(784), C6(1046) - Major Chord
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        const times = [0.0, 0.12, 0.24, 0.36];
+
+        notes.forEach((freq, i) => {
+            const t = now + times[i];
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.connect(gain);
+            gain.connect(masterGain);
+
+            osc.type = 'triangle'; // Soft but clear
+            osc.frequency.setValueAtTime(freq, t);
+
+            // Envelope: Short Attack, Decay (Bell-like)
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.8, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3); // Fade out
+
+            osc.start(t);
+            osc.stop(t + 0.35); // Stop after envelope
+        });
+    };
+
+    // Play immediately
+    playSparkle();
+    // Repeat every 1.2s (0.36 + fade is short, but we want space between loops)
+    alarmIntervalId = setInterval(playSparkle, 1200);
+}
+
+function stopAlarmSound() {
+    if (alarmIntervalId) {
+        clearInterval(alarmIntervalId);
+        alarmIntervalId = null;
+    }
+    stopAlarmPlayback(); // Stop any currently playing continuous sound
+}
+
+function stopAlarmPlayback() {
+    // If we were using a continuous oscillator, we'd stop it here.
+    // Since we use fire-and-forget loops, we rely on clearing interval.
+    // However, if we want to silence immediately:
+    if (masterGain && audioCtx) {
+        // Ramp down master volume quickly to avoid click
+        masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+
+        // We need to restore volume for next time though!
+        // So better: Master gain logic is strictly volume control.
+        // We should just stop scheduling new beeps (which clearInterval does).
+        // The current beep (0.5s) will finish. That is acceptable.
+
+        // BUT if user toggles "Sound Off", we wanted silence.
+        // So yes, ramp down is good, but then we need `startAlarmSound` to reset it.
+        // Or simpler: don't touch masterGain here, just let the beep finish.
+        // It's only 0.5s.
+    }
+}
+
+function updateTimerDisplay(el, seconds) {
+    if (!el) return;
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    el.textContent = `${m}:${s}`;
+}
+
+// Add to initialization
+document.addEventListener("DOMContentLoaded", () => {
+    setupTimer();
+});
