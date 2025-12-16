@@ -375,3 +375,9 @@ h1 {
     right: calc(50% - 150px);
   }
 }
+
+/* Step 2.1: Custom Input Placeholder */
+#timerCustom::placeholder {
+  color: #ccc;
+  font-size: 0.8rem;
+}

@@ -864,26 +864,68 @@ let endAtMs = 0;
 
 function setupTimer() {
     const presetSelect = document.getElementById("timerPreset");
+    const customInput = document.getElementById("timerCustom");
     const startBtn = document.getElementById("timerStartBtn");
     const overlay = document.getElementById("timerOverlay");
     const closeBtn = document.getElementById("timerCloseBtn");
     const display = document.getElementById("timerDisplay");
 
-    if (!presetSelect || !startBtn || !overlay) return;
+    if (!presetSelect || !startBtn || !overlay || !customInput) return;
+
+    // Helper: Update duration based on active input
+    const updateFromInput = () => {
+        const customVal = parseInt(customInput.value, 10);
+        if (!isNaN(customVal) && customVal > 0) {
+            // Valid custom input (1-60)
+            // Clamp if > 60? Requirement says "Start disabled or clamp". 
+            // Let's Disable Start if out of range for safety, but if effective range is 1-60 in UI.
+            // Requirement B: "Custom effective -> known".
+            // Let's allow typing, but validate on Start or Change.
+
+            // Simple logic: if custom input has value, it overrides preset
+            if (customVal < 1 || customVal > 60) {
+                startBtn.disabled = true;
+                startBtn.style.opacity = 0.5;
+            } else {
+                startBtn.disabled = false;
+                startBtn.style.opacity = 1.0;
+                timerDuration = customVal * 60;
+                updateTimerDisplay(display, timerDuration);
+            }
+            presetSelect.style.opacity = 0.5; // Visual cue
+            customInput.style.borderColor = "#006400";
+        } else {
+            // No custom input -> use Preset
+            startBtn.disabled = false;
+            startBtn.style.opacity = 1.0;
+            timerDuration = parseInt(presetSelect.value, 10);
+            updateTimerDisplay(display, timerDuration);
+            presetSelect.style.opacity = 1.0;
+            customInput.style.borderColor = "#ccc";
+        }
+    };
 
     // Preset Change
     presetSelect.addEventListener("change", (e) => {
-        timerDuration = parseInt(e.target.value, 10);
-        updateTimerDisplay(display, timerDuration);
-        // If changing preset while running, do we stop? 
-        // Spec implies existing behavior (just presets). Step 2 requirement says: 
-        // "start" uses "current selected duration". 
-        // We shouldn't probably auto-stop if just changing dropdown, but usually you'd want to.
-        // For minimal diff, we leave status alone until Start is clicked.
+        // Clear custom input on preset change
+        customInput.value = "";
+        updateFromInput();
+    });
+
+    // Custom Input Change
+    customInput.addEventListener("input", (e) => {
+        updateFromInput();
     });
 
     // Start
     startBtn.addEventListener("click", () => {
+        // Double check validity (though disabled button handles most)
+        const customVal = parseInt(customInput.value, 10);
+        if (customInput.value && (isNaN(customVal) || customVal < 1 || customVal > 60)) {
+            alert("1〜60ぷん の あいだで にゅうりょく してね");
+            return;
+        }
+
         // Stop existing if any (Requirement D)
         stopTimer();
 
@@ -904,8 +946,8 @@ function setupTimer() {
         // Requirement E: Stop and reset
         stopTimer();
         overlay.style.display = "none";
-        // Reset display to selection
-        updateTimerDisplay(display, timerDuration);
+        // Reset display to selection (maintain custom input if set)
+        updateFromInput();
     });
 }
 
