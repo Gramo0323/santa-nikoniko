@@ -912,17 +912,14 @@ function setupTimer() {
     soundToggle.addEventListener("change", (e) => {
         soundEnabled = e.target.checked;
         localStorage.setItem("timer_sound_enabled", soundEnabled ? "1" : "0");
-        // If alarm running, updating logic might be complex if loop relies on settings.
-        // Step 5C: startAlarmSound checks soundEnabled. 
-        // If we toggle OFF while ringing, Requirement says "Sound stops (or mutes)".
-        if (!soundEnabled && timerStatus === 'finished_alarm') {
-            stopAlarmSound(); // Actually stop it completely?
-            // Or just mute? Requirement says "stop stopAlarmSound isn't called, but maybe mute".
-            // Let's call stopAlarmSound() if we just want silence, but stay in alarm screen.
-            // But wait, stopAlarmSound clears the interval.
-            // If toggle off, we can just set gain to 0 if we implement dynamic gain update.
-            // Simplest: If ringing, and turn off, stop sound playback but keep screen.
-            if (alarmOscillator) stopAlarmPlayback(); // Just stop the noise
+
+        // If alarm is currently active (UI is in alarm mode), toggle sound immediately
+        if (timerStatus === 'finished_alarm') {
+            if (soundEnabled) {
+                startAlarmSound();
+            } else {
+                stopAlarmSound();
+            }
         }
     });
 
@@ -1190,42 +1187,46 @@ function startAlarmSound() {
     }
 
     // Prevent double start
-    if (alarmIntervalId || alarmOscillator) return;
+    if (alarmIntervalId) return;
 
     ensureAudioUnlocked();
 
-    // Loop beep function
-    const playBeep = () => {
+    // Loop sparkle function (Step 6)
+    const playSparkle = () => {
         if (!audioCtx || !masterGain) return;
+        const now = audioCtx.currentTime;
 
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain(); // Local envelope gain
+        // Sparkle Arpeggio: A4 -> C#5 -> E5 -> A5 (Kirakira Rising)
+        // Adjust keys for child-friendly gentle sound
+        // Let's use: C5(523), E5(659), G5(784), C6(1046) - Major Chord
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        const times = [0.0, 0.12, 0.24, 0.36];
 
-        osc.connect(gain);
-        gain.connect(masterGain);
+        notes.forEach((freq, i) => {
+            const t = now + times[i];
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
 
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // Drop pitch
+            osc.connect(gain);
+            gain.connect(masterGain);
 
-        // Envelope
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.05);
-        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+            osc.type = 'triangle'; // Soft but clear
+            osc.frequency.setValueAtTime(freq, t);
 
-        osc.start(audioCtx.currentTime);
-        osc.stop(audioCtx.currentTime + 0.5);
+            // Envelope: Short Attack, Decay (Bell-like)
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.8, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3); // Fade out
 
-        // Tracking for cleanup if needed? For short beeps, fire-and-forget is usually ok
-        // but we might want to stop mid-beep. 
-        // For simplicity, we just stop the interval loop.
-        // The masterGain controls volume anyway.
+            osc.start(t);
+            osc.stop(t + 0.35); // Stop after envelope
+        });
     };
 
     // Play immediately
-    playBeep();
-    // Repeat every 1s
-    alarmIntervalId = setInterval(playBeep, 1000);
+    playSparkle();
+    // Repeat every 1.2s (0.36 + fade is short, but we want space between loops)
+    alarmIntervalId = setInterval(playSparkle, 1200);
 }
 
 function stopAlarmSound() {
