@@ -35,9 +35,11 @@
             <!-- Step 5: Sound Controls -->
             <div style="display:inline-flex; align-items:center; margin-left:10px; font-size:0.8rem;">
                 <label style="cursor:pointer; margin-right:5px;">
-                    <input type="checkbox" id="timerSoundToggle" checked> 音
+                    <input type="checkbox" id="timerSoundToggle"> 音<small
+                        style="color:#888; margin-left:4px;">（最初はOFFです）</small>
                 </label>
                 <input type="range" id="timerVolume" min="0" max="100" value="50" style="width:60px;">
+                <small style="margin-left:8px; color:#888;">※おうちの人といっしょに せってい</small>
             </div>
         </div>
     </header>
@@ -92,6 +94,7 @@
         <div class="timer-content">
             <div id="timerDisplay" class="timer-display">10:00</div>
             <div id="timerMessage" class="timer-message" style="display:none;">おしまい！</div>
+            <div id="timerAutoStopMsg" class="timer-autostop-msg" style="display:none;">おとが じどうで とまりました</div>
             <div id="timerControlsOverlay" style="margin-top:20px;">
                 <button id="timerOverlayStartBtn" class="btn timer-control-btn"
                     style="display:none; background:#ff9800; color:#fff;">スタート</button>

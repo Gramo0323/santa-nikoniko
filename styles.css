@@ -414,6 +414,13 @@ h1 {
   animation: pulse-btn 1s infinite alternate;
 }
 
+/* Step 8A: Auto-stop message */
+.timer-autostop-msg {
+  font-size: 1.2rem;
+  color: #aaa;
+  margin-top: 10px;
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);

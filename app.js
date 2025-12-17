@@ -8,6 +8,7 @@ const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
 
 // 状態管理
 let appState = {};
+let helpTotal = 0; // Phase2: お手伝いカウンタ（5回で+1サンタスタンプ）
 let supabaseClient = null;
 let isHydrated = false; // 初期ロード完了フラグ
 let saveTimeout = null; // デバウンス用タイマー
@@ -139,6 +140,11 @@ async function loadData() {
         if (raw) {
             appState = JSON.parse(raw);
         }
+        // Phase2: localStorageからhelp_total復元（後方互換：無ければ0）
+        const savedHelp = localStorage.getItem('santa_help_total');
+        helpTotal = savedHelp ? parseInt(savedHelp, 10) : 0;
+        if (isNaN(helpTotal)) helpTotal = 0;
+
         isHydrated = true; // LocalStorage読み込み完了でHydratedとする（未ログイン時）
         renderDays();
         updatePoints();
@@ -171,6 +177,8 @@ async function _performSave() {
     // 常にlocalStorageには保存（オフライン対応/バックアップ）
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        // Phase2: help_totalもlocalStorageに保存
+        localStorage.setItem('santa_help_total', helpTotal.toString());
     } catch (e) {
         console.error("LocalStorage save error:", e);
     }
@@ -191,12 +199,13 @@ async function _performSave() {
 
 async function loadDataFromSupabase(userId) {
     try {
+        // Phase2: 日付範囲の進捗 + _help行の両方を取得
+        // ORフィルタを使用：(date >= START_DATE AND date <= END_DATE) OR date = '_help'
         const { data, error } = await supabaseClient
             .from('progress')
             .select('date, session, value')
             .eq('board_id', BOARD_ID)
-            .gte('date', formatDateKey(START_DATE))
-            .lte('date', formatDateKey(END_DATE));
+            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),date.eq._help`);
 
         if (error) throw error;
 
@@ -218,9 +227,20 @@ async function loadDataFromSupabase(userId) {
 
         appState = newState;
 
+        // Phase2: help_total読み込み（特殊行 date='_help'）
+        const helpRow = data?.find(row => row.date === '_help' && row.session === 0);
+        if (helpRow && helpRow.value) {
+            helpTotal = parseInt(helpRow.value, 10);
+            if (isNaN(helpTotal)) helpTotal = 0;
+        } else {
+            helpTotal = 0; // 後方互換：存在しなければ0
+        }
+
         // 【重要】Supabaseから取得したデータをLocalStorageにも反映（キャッシュ同期）
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            // Phase2: help_totalもlocalStorageに同期
+            localStorage.setItem('santa_help_total', helpTotal.toString());
         } catch (e) {
             console.error("LocalStorage sync error:", e);
         }
@@ -281,12 +301,31 @@ async function saveDataToSupabase(userId) {
             .upsert(updates, { onConflict: 'board_id, date, session' });
 
         if (error) throw error;
-        if (error) throw error;
         console.log("Supabase(progress)に保存しました");
         showSaveStatus(true);
     } catch (e) {
         console.error("Supabase save error:", e);
         showSaveStatus(false);
+    }
+
+    // Phase2: help_totalをSupabaseに保存（特殊行として）
+    try {
+        const { error: helpError } = await supabaseClient
+            .from('progress')
+            .upsert({
+                board_id: BOARD_ID,
+                date: '_help',
+                session: 0,
+                value: helpTotal.toString(),
+                updated_by: userId,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'board_id, date, session' });
+
+        if (helpError) {
+            console.error("Supabase help_total save error:", helpError);
+        }
+    } catch (e) {
+        console.error("Supabase help_total save error:", e);
     }
 }
 
@@ -693,6 +732,7 @@ function setupResetButton() {
     btn.addEventListener("click", () => {
         if (confirm("ほんとうに ぜんぶ けしますか？")) {
             appState = {};
+            helpTotal = 0; // Phase2: help_totalもリセット
             saveData(); // Supabase側も空にすべきだが、saveDataの実装上 updates=[] になると消えない。
             // 明示的に削除処理を入れる
             if (supabaseClient) {
@@ -707,9 +747,19 @@ function setupResetButton() {
                             .then(() => {
                                 console.log("Supabaseデータを全削除しました");
                             });
+                        // Phase2: help_total行も削除
+                        supabaseClient.from('progress')
+                            .delete()
+                            .eq('board_id', BOARD_ID)
+                            .eq('date', '_help')
+                            .then(() => {
+                                console.log("Supabase help_totalを削除しました");
+                            });
                     }
                 });
             }
+            // Phase2: localStorageからもhelp_total削除
+            localStorage.removeItem('santa_help_total');
             renderDays();
             updatePoints();
         }
@@ -865,12 +915,14 @@ let endAtMs = 0;
 let remainingSec = 0; // Stored during pause
 
 // Step 5: Web Audio API & Sound Settings
-let soundEnabled = true; // Default
+let soundEnabled = false; // Step 8C: Default OFF for first-time users (safety first)
 let soundVolume = 0.5;   // Default 50%
 let audioCtx = null;
 let masterGain = null;
 let alarmOscillator = null;
 let alarmIntervalId = null;
+let alarmAutoStopTimeoutId = null;
+let alarmAutoStopped = false;
 
 function setupTimer() {
     const presetSelect = document.getElementById("timerPreset");
@@ -1043,6 +1095,11 @@ function setupTimer() {
         remainingSec = timerDuration; // Reset remaining
         endAtMs = Date.now() + timerDuration * 1000;
         timerStatus = 'running';
+
+        // Step 8A: Reset auto-stop message
+        const autoStopMsg = document.getElementById('timerAutoStopMsg');
+        if (autoStopMsg) autoStopMsg.style.display = 'none';
+        alarmAutoStopped = false;
 
         updateTimerDisplay(display, timerDuration);
         overlay.style.display = "flex";
@@ -1248,6 +1305,18 @@ function startAlarmSound() {
 
     ensureAudioUnlocked();
 
+    // Step 8A: 60-second auto-stop failsafe
+    alarmAutoStopped = false;
+    if (alarmAutoStopTimeoutId) clearTimeout(alarmAutoStopTimeoutId);
+    alarmAutoStopTimeoutId = setTimeout(() => {
+        stopAlarmSound();
+        alarmAutoStopped = true;
+        // Show auto-stop message
+        const autoStopMsg = document.getElementById('timerAutoStopMsg');
+        if (autoStopMsg) autoStopMsg.style.display = 'block';
+        console.log("Alarm auto-stopped after 60 seconds");
+    }, 60000);
+
     // Loop sparkle function (Step 6)
     const playSparkle = () => {
         if (!audioCtx || !masterGain) return;
@@ -1291,6 +1360,11 @@ function stopAlarmSound() {
         clearInterval(alarmIntervalId);
         alarmIntervalId = null;
     }
+    // Step 8A: Clear auto-stop timeout
+    if (alarmAutoStopTimeoutId) {
+        clearTimeout(alarmAutoStopTimeoutId);
+        alarmAutoStopTimeoutId = null;
+    }
     stopAlarmPlayback(); // Stop any currently playing continuous sound
 }
 
@@ -1327,3 +1401,64 @@ function updateTimerDisplay(el, seconds) {
 document.addEventListener("DOMContentLoaded", () => {
     setupTimer();
 });
+
+// Step 8B: Sleep/Wake Resilience
+function handleWakeUp() {
+    if (document.hidden) return; // Only on visible
+
+    const now = Date.now();
+
+    if (timerStatus === 'running') {
+        if (now >= endAtMs) {
+            // Timer ended during sleep - trigger alarm
+            if (tickTimerId) {
+                clearInterval(tickTimerId);
+                tickTimerId = null;
+            }
+            remainingSec = 0;
+            timerStatus = 'finished_alarm';
+
+            // Update display
+            const display = document.getElementById('timerDisplay');
+            if (display) updateTimerDisplay(display, 0);
+
+            // Trigger alarm UI
+            const pauseBtn = document.getElementById("timerPauseBtn");
+            const resumeBtn = document.getElementById("timerResumeBtn");
+            const overlayStartBtn = document.getElementById("timerOverlayStartBtn");
+            const resetBtn = document.getElementById("timerResetBtn");
+            const stopSoundBtn = document.getElementById("timerStopSoundBtn");
+            const timerMessage = document.getElementById("timerMessage");
+            const closeBtn = document.getElementById("timerCloseBtn");
+            const timerStampBtn = document.getElementById("timerStampBtn");
+
+            if (pauseBtn) pauseBtn.style.display = 'none';
+            if (resumeBtn) resumeBtn.style.display = 'none';
+            if (resetBtn) resetBtn.style.display = 'none';
+            if (overlayStartBtn) overlayStartBtn.style.display = 'none';
+            if (stopSoundBtn) stopSoundBtn.style.display = 'inline-block';
+            if (timerMessage) timerMessage.style.display = 'block';
+            if (closeBtn) closeBtn.style.display = 'none';
+            if (timerStampBtn) timerStampBtn.style.display = 'inline-block';
+
+            startAlarmSound();
+            console.log("Timer ended during sleep - alarm triggered on wake");
+        } else {
+            // Still running - resync display
+            const display = document.getElementById('timerDisplay');
+            if (display) {
+                remainingSec = Math.ceil((endAtMs - now) / 1000);
+                updateTimerDisplay(display, remainingSec);
+            }
+        }
+    } else if (timerStatus === 'finished_alarm') {
+        // Ensure AudioContext is resumed (may have been suspended during sleep)
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                console.log("AudioContext resumed on wake");
+            });
+        }
+    }
+}
+
+document.addEventListener("visibilitychange", handleWakeUp);
