@@ -181,6 +181,7 @@ function setupHelpButton() {
 
         // UI即時更新
         updateHelpUI();
+        updatePoints(); // Phase5: スゴロク進行も即時更新
 
         // 保存実行 (localStorage + Supabase)
         saveData();
@@ -630,7 +631,8 @@ function updatePoints() {
         checkDate.setDate(checkDate.getDate() + 1);
     }
 
-    const totalAll = totalBase + totalBonus;
+    const helpBonus = Math.floor(helpTotal / 5);
+    const totalAll = totalBase + totalBonus + helpBonus;
     const todayAll = todayBase + todayBonus;
 
     // UI更新
