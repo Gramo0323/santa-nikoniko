@@ -155,8 +155,42 @@ document.addEventListener("DOMContentLoaded", () => {
     initSupabase();
     // loadData() は initSupabase -> setupAuth -> updateAuthUI の流れで呼ばれるように変更
     setupResetButton();
+    setupHelpButton(); // Phase4: お手伝いボタンセットアップ
     SoundManager.init();
 });
+
+// Phase4: お手伝いボタンのセットアップとイベントハンドリング
+function setupHelpButton() {
+    const btn = document.getElementById('helpButton');
+    if (!btn) return;
+
+    // ボタンの有効化
+    btn.removeAttribute('disabled');
+    btn.title = "お手伝いしたら押してね！";
+
+    // クリックイベント
+    btn.addEventListener('click', () => {
+        // 連打防止
+        btn.disabled = true;
+
+        // カウントアップ
+        helpTotal++;
+
+        // 音を鳴らす（UX向上）
+        SoundManager.play('ok');
+
+        // UI即時更新
+        updateHelpUI();
+
+        // 保存実行 (localStorage + Supabase)
+        saveData();
+
+        // 連打防止解除（少し長めに取る）
+        setTimeout(() => {
+            btn.disabled = false;
+        }, 800);
+    });
+}
 
 async function loadData() {
     // ログイン中の場合、Supabaseから取得
