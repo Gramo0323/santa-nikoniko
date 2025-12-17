@@ -53,6 +53,27 @@
     </div>
 
     <main class="wrap">
+        <!-- Phase3: お手伝いセクション（読み取りUI） -->
+        <div id="helpSection" class="help-section">
+            <div class="help-header">
+                <span class="help-title">🧹 おてつだい</span>
+                <span id="helpBonusDisplay" class="help-bonus">スタンプ: 0こ</span>
+            </div>
+            <div class="help-body">
+                <button id="helpButton" class="btn help-btn" disabled title="Phase4で有効化予定">+1</button>
+                <div class="help-gauge-area">
+                    <div id="helpGauge" class="help-gauge">
+                        <span class="gauge-dot">○</span>
+                        <span class="gauge-dot">○</span>
+                        <span class="gauge-dot">○</span>
+                        <span class="gauge-dot">○</span>
+                        <span class="gauge-dot">○</span>
+                    </div>
+                    <div id="helpRemaining" class="help-remaining">あと5かいで サンタスタンプ+1！</div>
+                </div>
+            </div>
+        </div>
+
         <div id="sugorokuArea">
             <h2>サンタロード</h2>
             <div id="sugorokuBoard" class="board"></div>

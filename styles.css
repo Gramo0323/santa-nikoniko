@@ -487,3 +487,107 @@ h1 {
     background-color: transparent;
   }
 }
+
+/* Phase3: お手伝いセクション */
+.help-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border-radius: 12px;
+  border: 2px solid #81c784;
+}
+
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.help-title {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #2e7d32;
+}
+
+.help-bonus {
+  font-size: 0.9rem;
+  background: #fff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: #388e3c;
+  font-weight: bold;
+  border: 1px solid #a5d6a7;
+}
+
+.help-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.help-btn {
+  min-width: 60px;
+  min-height: 60px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+}
+
+.help-btn:disabled {
+  background: #a5d6a7;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.help-btn:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+.help-gauge-area {
+  flex: 1;
+}
+
+.help-gauge {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.gauge-dot {
+  font-size: 1.4rem;
+  color: #81c784;
+}
+
+.gauge-dot.filled {
+  color: #2e7d32;
+}
+
+.help-remaining {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+@media (max-width: 520px) {
+  .help-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .help-btn {
+    width: 100%;
+  }
+
+  .help-gauge {
+    justify-content: center;
+  }
+
+  .help-remaining {
+    text-align: center;
+  }
+}

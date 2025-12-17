@@ -116,6 +116,40 @@ const SoundManager = {
     }
 };
 
+// Phase3: お手伝いUI更新関数
+function updateHelpUI() {
+    const gauge = helpTotal % 5;
+    const helpBonus = Math.floor(helpTotal / 5);
+    const remaining = gauge === 0 ? 5 : 5 - gauge;
+
+    // ゲージ更新
+    const gaugeEl = document.getElementById('helpGauge');
+    if (gaugeEl) {
+        const dots = gaugeEl.querySelectorAll('.gauge-dot');
+        dots.forEach((dot, i) => {
+            if (i < gauge) {
+                dot.textContent = '●';
+                dot.classList.add('filled');
+            } else {
+                dot.textContent = '○';
+                dot.classList.remove('filled');
+            }
+        });
+    }
+
+    // 残り回数更新
+    const remainingEl = document.getElementById('helpRemaining');
+    if (remainingEl) {
+        remainingEl.textContent = `あと${remaining}かいで サンタスタンプ+1！`;
+    }
+
+    // ボーナス表示更新
+    const bonusEl = document.getElementById('helpBonusDisplay');
+    if (bonusEl) {
+        bonusEl.textContent = `スタンプ: ${helpBonus}こ`;
+    }
+}
+
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
     initSupabase();
@@ -148,10 +182,12 @@ async function loadData() {
         isHydrated = true; // LocalStorage読み込み完了でHydratedとする（未ログイン時）
         renderDays();
         updatePoints();
+        updateHelpUI(); // Phase3: お手伝いUI更新
     } catch (e) {
         console.error("保存データの読み込みに失敗しました", e);
         // エラーでも操作可能にするためHydratedにはする（ただし空データ）
         isHydrated = true;
+        updateHelpUI(); // Phase3: エラー時もUI更新（0表示）
     }
 }
 
@@ -244,11 +280,8 @@ async function loadDataFromSupabase(userId) {
         } catch (e) {
             console.error("LocalStorage sync error:", e);
         }
-
-        isHydrated = true; // Supabase同期完了
-        console.log("Supabase(progress)からデータを読み込みました");
-        renderDays();
         updatePoints();
+        updateHelpUI(); // Phase3: お手伝いUI更新
 
     } catch (e) {
         console.error("Supabase load error:", e);
@@ -263,6 +296,7 @@ async function loadDataFromSupabase(userId) {
             isHydrated = true;
             renderDays();
             updatePoints();
+            updateHelpUI(); // Phase3: エラー時もUI更新
         }
     }
 }
@@ -762,6 +796,7 @@ function setupResetButton() {
             localStorage.removeItem('santa_help_total');
             renderDays();
             updatePoints();
+            updateHelpUI(); // Phase3: お手伝いUI更新
         }
     });
 }
