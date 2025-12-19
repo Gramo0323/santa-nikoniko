@@ -317,7 +317,7 @@ async function loadDataFromSupabase(userId) {
         }
         updatePoints();
         updateHelpUI(); // Phase3: お手伝いUI更新
-
+        isHydrated = true; // Phase4: 読み込み完了でHydratedとする
     } catch (e) {
         console.error("Supabase load error:", e);
         // エラー時でも、とりあえずLocalStorageにあるものでHydratedとする（操作不能を防ぐ）
