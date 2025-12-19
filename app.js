@@ -3,7 +3,7 @@ const START_DATE = new Date("2025-12-12");
 const END_DATE = new Date("2025-12-24");
 const STORAGE_KEY = "santa_nikoniko_v1";
 const BOARD_ID = "b4a467a1-5f6a-4023-8e55-5390a3e98d2a";
-const HELP_DB_KEY = "1900-01-01"; // SupabaseのDATE型制約回避用の特殊キー
+const HELP_DB_PREFIX = "1900-01-"; // Supabaseのvalue制約回避用。日部分に数値を格納。
 
 const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
 
@@ -285,7 +285,7 @@ async function loadDataFromSupabase(userId) {
             .from('progress')
             .select('date, session, value')
             .eq('board_id', BOARD_ID)
-            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),date.eq.${HELP_DB_KEY}`);
+            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),and(date.gte.${HELP_DB_PREFIX}01,date.lte.${HELP_DB_PREFIX}31)`);
 
         if (error) throw error;
 
@@ -307,10 +307,11 @@ async function loadDataFromSupabase(userId) {
 
         appState = newState;
 
-        // Phase2: help_total読み込み（特殊行 date=HELP_DB_KEY）
-        const helpRow = data?.find(row => row.date === HELP_DB_KEY && row.session === 1);
-        if (helpRow && helpRow.value) {
-            helpTotal = parseInt(helpRow.value, 10);
+        // Phase2: help_total読み込み（特殊行 date=1900-01-XX）
+        const helpRow = data?.find(row => row.date.startsWith(HELP_DB_PREFIX));
+        if (helpRow) {
+            const countStr = helpRow.date.replace(HELP_DB_PREFIX, '');
+            helpTotal = parseInt(countStr, 10);
             if (isNaN(helpTotal)) helpTotal = 0;
         } else {
             helpTotal = 0; // 後方互換：存在しなければ0
@@ -386,15 +387,19 @@ async function saveDataToSupabase(userId) {
         showSaveStatus(false);
     }
 
-    // Phase2: help_totalをSupabaseに保存（特殊行として）
+    // Phase2: help_totalをSupabaseに保存（制約回避のため日付に数値を埋め込む）
     try {
+        // 前のカウント行を削除（日付が変わるため）
+        await supabaseClient.from('progress').delete().eq('board_id', BOARD_ID).like('date', HELP_DB_PREFIX + '%');
+
+        const dateString = HELP_DB_PREFIX + helpTotal.toString().padStart(2, '0');
         const { error: helpError } = await supabaseClient
             .from('progress')
             .upsert({
                 board_id: BOARD_ID,
-                date: HELP_DB_KEY,
+                date: dateString,
                 session: 1,
-                value: helpTotal.toString(),
+                value: 'bad', // 制約回避のため固定値（値自体は意味を持たない）
                 updated_by: userId,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'board_id, date, session' });
