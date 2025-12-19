@@ -308,7 +308,7 @@ async function loadDataFromSupabase(userId) {
         appState = newState;
 
         // Phase2: help_total読み込み（特殊行 date=HELP_DB_KEY）
-        const helpRow = data?.find(row => row.date === HELP_DB_KEY && row.session === 0);
+        const helpRow = data?.find(row => row.date === HELP_DB_KEY && row.session === 1);
         if (helpRow && helpRow.value) {
             helpTotal = parseInt(helpRow.value, 10);
             if (isNaN(helpTotal)) helpTotal = 0;
@@ -393,7 +393,7 @@ async function saveDataToSupabase(userId) {
             .upsert({
                 board_id: BOARD_ID,
                 date: HELP_DB_KEY,
-                session: 0,
+                session: 1,
                 value: helpTotal.toString(),
                 updated_by: userId,
                 updated_at: new Date().toISOString()
