@@ -148,6 +148,13 @@ function updateHelpUI() {
     if (bonusEl) {
         bonusEl.textContent = `スタンプ: ${helpBonus}こ`;
     }
+
+    // Phase4: Hydrationが完了していたらボタンを有効化
+    const btn = document.getElementById('helpButton');
+    if (btn && isHydrated) {
+        btn.disabled = false;
+        btn.title = "お手伝いしたら押してね！";
+    }
 }
 
 // 初期化
@@ -164,12 +171,13 @@ function setupHelpButton() {
     const btn = document.getElementById('helpButton');
     if (!btn) return;
 
-    // ボタンの有効化
-    btn.removeAttribute('disabled');
-    btn.title = "お手伝いしたら押してね！";
+    // 初期状態は disabled（ロード完了後に有効化）
+    btn.disabled = true;
+    btn.title = "よみこみちゅう...";
 
     // クリックイベント
     btn.addEventListener('click', () => {
+        if (!isHydrated) return; // セーフティガード
         // 連打防止
         btn.disabled = true;
 
@@ -331,7 +339,7 @@ async function loadDataFromSupabase(userId) {
             isHydrated = true;
             renderDays();
             updatePoints();
-            updateHelpUI(); // Phase3: エラー時もUI更新
+            updateHelpUI(); // Phase3: エラー時もUI更新（ここでボタンも有効化される）
         }
     }
 }
