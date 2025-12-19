@@ -3,6 +3,7 @@ const START_DATE = new Date("2025-12-12");
 const END_DATE = new Date("2025-12-24");
 const STORAGE_KEY = "santa_nikoniko_v1";
 const BOARD_ID = "b4a467a1-5f6a-4023-8e55-5390a3e98d2a";
+const HELP_DB_KEY = "1900-01-01"; // SupabaseのDATE型制約回避用の特殊キー
 
 const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
 
@@ -284,7 +285,7 @@ async function loadDataFromSupabase(userId) {
             .from('progress')
             .select('date, session, value')
             .eq('board_id', BOARD_ID)
-            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),date.eq._help`);
+            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),date.eq.${HELP_DB_KEY}`);
 
         if (error) throw error;
 
@@ -306,8 +307,8 @@ async function loadDataFromSupabase(userId) {
 
         appState = newState;
 
-        // Phase2: help_total読み込み（特殊行 date='_help'）
-        const helpRow = data?.find(row => row.date === '_help' && row.session === 0);
+        // Phase2: help_total読み込み（特殊行 date=HELP_DB_KEY）
+        const helpRow = data?.find(row => row.date === HELP_DB_KEY && row.session === 0);
         if (helpRow && helpRow.value) {
             helpTotal = parseInt(helpRow.value, 10);
             if (isNaN(helpTotal)) helpTotal = 0;
@@ -391,7 +392,7 @@ async function saveDataToSupabase(userId) {
             .from('progress')
             .upsert({
                 board_id: BOARD_ID,
-                date: '_help',
+                date: HELP_DB_KEY,
                 session: 0,
                 value: helpTotal.toString(),
                 updated_by: userId,
