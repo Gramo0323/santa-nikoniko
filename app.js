@@ -160,6 +160,7 @@ function updateHelpUI() {
 
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
+    renderDays(); // 起動直後に枠だけ先行描画
     initSupabase();
     // loadData() は initSupabase -> setupAuth -> updateAuthUI の流れで呼ばれるように変更
     setupResetButton();
@@ -325,9 +326,6 @@ async function loadDataFromSupabase(userId) {
         } catch (e) {
             console.error("LocalStorage sync error:", e);
         }
-        updatePoints();
-        updateHelpUI(); // Phase3: お手伝いUI更新
-        isHydrated = true; // Phase4: 読み込み完了でHydratedとする
     } catch (e) {
         console.error("Supabase load error:", e);
         // エラー時でも、とりあえずLocalStorageにあるものでHydratedとする（操作不能を防ぐ）
@@ -338,11 +336,12 @@ async function loadDataFromSupabase(userId) {
                 const raw = localStorage.getItem(STORAGE_KEY);
                 if (raw) appState = JSON.parse(raw);
             } catch (localE) { }
-            isHydrated = true;
-            renderDays();
-            updatePoints();
-            updateHelpUI(); // Phase3: エラー時もUI更新（ここでボタンも有効化される）
         }
+    } finally {
+        updatePoints();
+        updateHelpUI(); // Phase3: お手伝いUI更新
+        isHydrated = true; // Phase4: 読み込み完了でHydratedとする
+        renderDays(); // 成功・失敗に関わらず必ず描画
     }
 }
 
