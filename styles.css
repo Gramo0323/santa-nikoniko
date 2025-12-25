@@ -1,10 +1,52 @@
 :root {
   font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+  --washi-bg: #fcfaf2;
+  /* 生成り */
+  --washi-card: #fdfdfd;
+  /* クリアな生成り */
+  --accent-red: #b94047;
+  /* 落ち着いた朱 */
+  --accent-gold: #d4af37;
+  /* 金 */
+  --ink: #333333;
+  /* 墨色 */
+  --muted: #888888;
 }
 
 body {
   margin: 0;
-  background: #f5f5f5;
+  background-color: var(--washi-bg);
+  background-image: url('./assets/washi_pattern.svg');
+  background-attachment: fixed;
+  color: var(--ink);
+  min-height: 100vh;
+  position: relative;
+}
+
+/* 透かし漢字『謹賀新年』 */
+body::before,
+body::after {
+  content: "謹賀新年";
+  position: fixed;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", "serif";
+  font-weight: bold;
+  opacity: 0.07;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  letter-spacing: 0.2em;
+}
+
+body::before {
+  top: 20px;
+  right: 20px;
+  font-size: 2.5rem;
+}
+
+body::after {
+  bottom: 20px;
+  left: 20px;
+  font-size: 3rem;
 }
 
 .wrap {
@@ -16,25 +58,26 @@ body {
 h1 {
   margin: 0 0 8px;
   font-size: 1.8rem;
-  color: #006400;
+  color: var(--accent-red);
   font-family: "Hiragino Maru Gothic Pro", "Yu Gothic", sans-serif;
   letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--accent-gold);
+  padding-bottom: 8px;
+  display: inline-block;
 }
 
 .sub {
-  margin: 0 0 20px;
+  margin: 8px 0 20px;
   font-size: 0.9rem;
-  color: #c5a000;
+  color: #a08000;
   font-weight: bold;
   letter-spacing: 0.05em;
 }
 
 .header-banner {
-  background-color: #fff;
-  background-image: radial-gradient(#d0f0c0 2px, transparent 2px);
-  background-size: 24px 24px;
-  border: 3px solid #006400;
-  box-shadow: 6px 6px 0 rgba(197, 160, 0, 0.2);
+  background-color: var(--washi-card);
+  border: 2px solid var(--accent-red);
+  box-shadow: 4px 4px 0 rgba(185, 64, 71, 0.1);
   padding: 40px 20px;
   text-align: center;
   border-radius: 12px;
@@ -68,10 +111,11 @@ h1 {
 }
 
 .day {
-  background: #fff;
+  background: var(--washi-card);
   border-radius: 12px;
   padding: 12px;
-  border: 1px solid #e7e7e7;
+  border: 1px solid var(--accent-red);
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .day-title {
@@ -168,9 +212,9 @@ h1 {
 #sugorokuArea {
   margin-bottom: 24px;
   padding: 16px;
-  background: #fff;
+  background: var(--washi-card);
   border-radius: 12px;
-  border: 1px solid #e7e7e7;
+  border: 1px solid var(--accent-red);
 }
 
 #sugorokuArea h2 {
@@ -514,9 +558,9 @@ h1 {
 .help-section {
   margin-bottom: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  background: linear-gradient(135deg, #fdfdfd 0%, #fffaf0 100%);
   border-radius: 12px;
-  border: 2px solid #81c784;
+  border: 1px solid var(--accent-red);
 }
 
 .help-header {
@@ -529,17 +573,17 @@ h1 {
 .help-title {
   font-size: 1.1rem;
   font-weight: bold;
-  color: #2e7d32;
+  color: var(--accent-red);
 }
 
 .help-bonus {
   font-size: 0.9rem;
-  background: #fff;
+  background: var(--washi-card);
   padding: 4px 10px;
   border-radius: 20px;
-  color: #388e3c;
+  color: var(--ink);
   font-weight: bold;
-  border: 1px solid #a5d6a7;
+  border: 1px solid var(--accent-gold);
 }
 
 .help-body {
@@ -553,7 +597,7 @@ h1 {
   min-height: 60px;
   font-size: 1.5rem;
   font-weight: bold;
-  background: #4caf50;
+  background: var(--accent-red);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -562,7 +606,7 @@ h1 {
 }
 
 .help-btn:disabled {
-  background: #a5d6a7;
+  background: #dcaaaa;
   cursor: not-allowed;
   opacity: 0.7;
 }
