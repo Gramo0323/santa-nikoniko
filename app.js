@@ -1,18 +1,46 @@
-// 期間設定（固定）
-const START_DATE = new Date("2025-12-12");
-const END_DATE = new Date("2025-12-24");
+// 期間設定（固定：Run1 だるまUIパック）
+const START_DATE_STR = "2025-12-26";
+const END_DATE_STR = "2026-01-07";
 const STORAGE_KEY = "santa_nikoniko_v1";
 const BOARD_ID = "b4a467a1-5f6a-4023-8e55-5390a3e98d2a";
-const HELP_DB_PREFIX = "1900-01-"; // Supabaseのvalue制約回避用。日部分に数値を格納。
+const HELP_DB_PREFIX = "1900-01-";
+// Supabaseのvalue制約回避用。日部分に数値を格納。
 
 const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
 
 // 状態管理
 let appState = {};
-let helpTotal = 0; // Phase2: お手伝いカウンタ（5回で+1サンタスタンプ）
+let helpTotal = 0;
 let supabaseClient = null;
-let isHydrated = false; // 初期ロード完了フラグ
-let saveTimeout = null; // デバウンス用タイマー
+let isHydrated = false;
+let saveTimeout = null;
+
+/**
+ * JST（Asia/Tokyo）基準の現在日付を取得する
+ * 実行環境のローカル時間に依存せず、常に日本時間で判定する
+ */
+function getJSTNow() {
+    const now = new Date();
+    // 日本時間との時差を考慮して調整
+    const jstOffset = 9 * 60; // JSTはUTC+9
+    const localOffset = now.getTimezoneOffset(); // 分単位（JSTなら -540）
+    const jstTime = now.getTime() + (jstOffset + localOffset) * 60 * 1000;
+    return new Date(jstTime);
+}
+
+function formatDateToKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function formatDateKey(date) {
+    return formatDateToKey(date);
+}
+
+const START_DATE_JST = new Date(START_DATE_STR + "T00:00:00+09:00");
+const END_DATE_JST = new Date(END_DATE_STR + "T23:59:59+09:00");
 
 // 音管理
 const SoundManager = {
@@ -160,13 +188,90 @@ function updateHelpUI() {
 
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
+    updateHeaderUI(); // だるまタイトルの反映
     renderDays(); // 起動直後に枠だけ先行描画
     initSupabase();
-    // loadData() は initSupabase -> setupAuth -> updateAuthUI の流れで呼ばれるように変更
     setupResetButton();
-    setupHelpButton(); // Phase4: お手伝いボタンセットアップ
+    setupHelpButton();
+    setupOnboarding(); // 導線A
     SoundManager.init();
+
+    // タブ復帰（visibilitychange）で再描画（日付切り替わり対応）
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateHeaderUI();
+            renderDays();
+        }
+    });
 });
+
+/**
+ * ヘッダーのタイトルとサブコピーをJST日付で更新する
+ */
+function updateHeaderUI() {
+    const now = getJSTNow();
+    const dateKey = formatDateToKey(now);
+    const m = now.getMonth() + 1;
+    const d = now.getDate();
+
+    // タイトル
+    const h1 = document.querySelector('header h1');
+    if (h1) h1.textContent = "🎍 だるまの にこにこカレンダー";
+    document.title = "だるまの にこにこカレンダー";
+
+    // サブコピー
+    const sub = document.querySelector('header .sub');
+    if (sub) {
+        let msg = "きょうも にこにこ、ひとつずつ。";
+        if (dateKey >= "2025-12-26" && dateKey <= "2025-12-31") {
+            msg = "もうすぐ おしょうがつ。きょうも にこにこ、ひとつずつ。";
+        } else if (m === 1 && d === 1) {
+            msg = "あけまして おめでとう。きょうも にこにこ、ひとつずつ。";
+        }
+        sub.textContent = msg;
+    }
+}
+
+/**
+ * 導線A（初回おひっこし）の実装
+ */
+function setupOnboarding() {
+    const ONBOARDING_KEY = "daruma_onboarding_v1";
+    const now = getJSTNow();
+    const dateKey = formatDateToKey(now);
+
+    // 12/26以降かつ未完了の場合のみ表示
+    if (dateKey >= "2025-12-26" && !localStorage.getItem(ONBOARDING_KEY)) {
+        showOnboardingModal();
+    }
+}
+
+function showOnboardingModal() {
+    const modal = document.createElement('div');
+    modal.id = "darumaOnboarding";
+    modal.className = "onboarding-overlay";
+    modal.innerHTML = `
+        <div class="onboarding-card">
+            <h2>おひっこし の おしらせ</h2>
+            <p>サンタさんは おうちに かえりました。<br>これからは だるまさんと いっしょに<br>にこにこを あつめましょう！</p>
+            <div class="onboarding-btns">
+                <button class="btn-primary" id="onboardingOk">だるまにする</button>
+                <button class="btn" id="onboardingLater">あとで</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => {
+        localStorage.setItem("daruma_onboarding_v1", "done");
+        // themeIdの概念が将来ある可能性を見越してセット（Run1仕様）
+        localStorage.setItem("themeId", "daruma");
+        modal.remove();
+    };
+
+    document.getElementById('onboardingOk').onclick = close;
+    document.getElementById('onboardingLater').onclick = close;
+}
 
 // Phase4: お手伝いボタンのセットアップとイベントハンドリング
 function setupHelpButton() {
@@ -286,7 +391,7 @@ async function loadDataFromSupabase(userId) {
             .from('progress')
             .select('date, session, value')
             .eq('board_id', BOARD_ID)
-            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),and(date.gte.${HELP_DB_PREFIX}01,date.lte.${HELP_DB_PREFIX}31)`);
+            .or(`and(date.gte.${formatDateToKey(START_DATE_JST)},date.lte.${formatDateToKey(END_DATE_JST)}),and(date.gte.${HELP_DB_PREFIX}01,date.lte.${HELP_DB_PREFIX}31)`);
 
         if (error) throw error;
 
@@ -467,17 +572,18 @@ function renderDays() {
     const container = document.getElementById("days");
     container.innerHTML = "";
 
-    const current = new Date(START_DATE);
-    const now = new Date();
-    const todayKey = formatDateKey(now);
+    const current = new Date(START_DATE_JST);
+    const nowJST = getJSTNow();
+    const todayKey = formatDateToKey(nowJST);
+    const end = new Date(END_DATE_JST);
 
     // Element storage
     let todayEl = null;
     const otherEls = [];
 
-    while (current <= END_DATE) {
+    while (current <= end) {
         // YYYY-MM-DD形式のキーを生成
-        const dateKey = formatDateKey(current);
+        const dateKey = formatDateToKey(current);
         const displayDate = `${current.getMonth() + 1}/${current.getDate()}`;
 
         // 曜日の取得
@@ -504,6 +610,7 @@ function renderDays() {
       <div class="day-title">${titleHtml}</div>
       ${createRowHtml(dateKey, 1)}
       ${createRowHtml(dateKey, 2)}
+      ${(dateKey === todayKey && isGoodDay(dateKey)) ? '<div class="fuku-badge">福</div>' : ''}
     `;
 
         if (dateKey === todayKey) {
@@ -560,7 +667,7 @@ function handleChoiceClick(e) {
         appState[dateKey] = {};
     }
 
-    const todayKey = formatDateKey(new Date());
+    const todayKey = formatDateKey(getJSTNow());
     const wasGood = isGoodDay(todayKey); // 変更前の状態
 
     // トグル動作：既に選択されているものを押したら解除
@@ -601,12 +708,12 @@ function updatePoints() {
     let todayBonus = 0;
 
     // 今日の日付キーを取得（期間判定も兼ねる）
-    const now = new Date();
+    const now = getJSTNow();
     const todayKey = formatDateKey(now);
     let isTodayInRange = false;
 
-    // 期間内かチェック（簡易的：開始日〜終了日の範囲内か）
-    if (now >= START_DATE && now <= END_DATE) {
+    // 期間内かチェック
+    if (now >= START_DATE_JST && now <= END_DATE_JST) {
         isTodayInRange = true;
     }
 
@@ -632,9 +739,9 @@ function updatePoints() {
     });
 
     // 2. ボーナス点の集計（期間内の日付について isGoodDay を判定）
-    let checkDate = new Date(START_DATE);
-    while (checkDate <= END_DATE) {
-        const dKey = formatDateKey(checkDate);
+    let checkDate = new Date(START_DATE_JST);
+    while (checkDate <= END_DATE_JST) {
+        const dKey = formatDateToKey(checkDate);
         if (isGoodDay(dKey)) {
             totalBonus += 1;
             if (dKey === todayKey) {
@@ -671,10 +778,10 @@ function calculateStreak() {
     const todayKey = formatDateKey(today);
 
     // 期間内の日付リスト作成（開始日〜今日）
-    let checkDate = new Date(START_DATE);
+    let checkDate = new Date(START_DATE_JST);
     const dateKeys = [];
-    while (checkDate <= END_DATE && checkDate <= today) {
-        dateKeys.push(formatDateKey(checkDate));
+    while (checkDate <= END_DATE_JST && checkDate <= today) {
+        dateKeys.push(formatDateToKey(checkDate));
         checkDate.setDate(checkDate.getDate() + 1);
     }
 
