@@ -178,7 +178,7 @@ function updateHelpUI() {
     // 残り回数更新
     const remainingEl = document.getElementById('helpRemaining');
     if (remainingEl) {
-        remainingEl.textContent = `あと${remaining}かいで サンタスタンプ+1！`;
+        remainingEl.textContent = `あと${remaining}かいで ごほうびスタンプ+1！`;
     }
 
     // ボーナス表示更新
@@ -961,8 +961,8 @@ function renderSugoroku(totalScore, baseScore) {
             // ユーザー要件によりimg要素を生成・挿入
             const img = document.createElement("img");
             // file:// プロトコルでも正しく参照できるようにベースURIを使用
-            img.src = new URL('assets/bonus-santa.png', document.baseURI).href;
-            img.alt = "BONUS Santa";
+            img.src = new URL('assets/bonus-daruma.png', document.baseURI).href;
+            img.alt = "だるま ボーナス";
             img.className = "bonus-img";
             sq.appendChild(img);
         }

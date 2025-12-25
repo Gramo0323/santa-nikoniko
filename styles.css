@@ -207,7 +207,7 @@ h1 {
   content: "";
   position: absolute;
   inset: 2px;
-  background-image: url('./assets/santa_stamp.png');
+  background-image: url('./assets/daruma_stamp.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
