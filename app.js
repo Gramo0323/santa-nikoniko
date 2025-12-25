@@ -1,7 +1,9 @@
 // 期間設定（固定：Run1 だるまUIパック）
 const START_DATE_STR = "2025-12-26";
 const END_DATE_STR = "2026-01-07";
+const CURRENT_SEASON_ID = "daruma_2025_12_26";
 const STORAGE_KEY = "santa_nikoniko_v1";
+const SEASON_ID_KEY = "santa_season_id";
 const BOARD_ID = "b4a467a1-5f6a-4023-8e55-5390a3e98d2a";
 const HELP_DB_PREFIX = "1900-01-";
 // Supabaseのvalue制約回避用。日部分に数値を格納。
@@ -41,6 +43,13 @@ function formatDateKey(date) {
 
 const START_DATE_JST = new Date(START_DATE_STR + "T00:00:00+09:00");
 const END_DATE_JST = new Date(END_DATE_STR + "T23:59:59+09:00");
+
+/**
+ * リセット対象期間内（12/26〜1/7）か判定
+ */
+function isInSeasonWindow(now) {
+    return now >= START_DATE_JST && now <= END_DATE_JST;
+}
 
 // 音管理
 const SoundManager = {
@@ -309,11 +318,29 @@ function setupHelpButton() {
 }
 
 async function loadData() {
+    // 期間内リセット判定（未ログイン/初期）
+    const now = getJSTNow();
+    if (isInSeasonWindow(now)) {
+        const storedId = localStorage.getItem(SEASON_ID_KEY);
+        if (storedId !== CURRENT_SEASON_ID) {
+            console.log("Season reset triggered (Local)");
+            await performSeasonReset(false);
+        }
+    }
+
     // ログイン中の場合、Supabaseから取得
     if (supabaseClient) {
-        const session = await supabaseClient.auth.getSession();
-        if (session && session.data.session) {
-            await loadDataFromSupabase(session.data.session.user.id);
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) {
+            // ログイン済みならメタデータチェックしてリセット
+            if (isInSeasonWindow(now)) {
+                const metaId = session.user.user_metadata?.seasonId;
+                if (metaId !== CURRENT_SEASON_ID) {
+                    console.log("Season reset triggered (Supabase)");
+                    await performSeasonReset(true, session.user.id);
+                }
+            }
+            await loadDataFromSupabase(session.user.id);
             return;
         }
     }
@@ -324,20 +351,59 @@ async function loadData() {
         if (raw) {
             appState = JSON.parse(raw);
         }
-        // Phase2: localStorageからhelp_total復元（後方互換：無ければ0）
         const savedHelp = localStorage.getItem('santa_help_total');
         helpTotal = savedHelp ? parseInt(savedHelp, 10) : 0;
         if (isNaN(helpTotal)) helpTotal = 0;
 
-        isHydrated = true; // LocalStorage読み込み完了でHydratedとする（未ログイン時）
+        isHydrated = true;
         renderDays();
         updatePoints();
-        updateHelpUI(); // Phase3: お手伝いUI更新
+        updateHelpUI();
     } catch (e) {
         console.error("保存データの読み込みに失敗しました", e);
-        // エラーでも操作可能にするためHydratedにはする（ただし空データ）
         isHydrated = true;
-        updateHelpUI(); // Phase3: エラー時もUI更新（0表示）
+        updateHelpUI();
+    }
+}
+
+/**
+ * シーズンリセット実行
+ */
+async function performSeasonReset(isLoggedIn, userId = null) {
+    // メモリ上の進捗をクリア
+    appState = {};
+    helpTotal = 0;
+
+    // localStorageの進捗をクリア
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem('santa_help_total');
+        localStorage.setItem(SEASON_ID_KEY, CURRENT_SEASON_ID);
+    } catch (e) {
+        console.error("Local reset error:", e);
+    }
+
+    if (isLoggedIn && userId) {
+        try {
+            // Supabaseの進捗削除（当該ユーザーの当該ボード）
+            const { error: delError } = await supabaseClient
+                .from('progress')
+                .delete()
+                .eq('board_id', BOARD_ID)
+                .eq('updated_by', userId);
+
+            if (delError) throw delError;
+
+            // user_metadataにseasonIdを保存
+            const { error: metaError } = await supabaseClient.auth.updateUser({
+                data: { seasonId: CURRENT_SEASON_ID }
+            });
+            if (metaError) throw metaError;
+
+            console.log("Supabase season reset completed");
+        } catch (e) {
+            console.error("Supabase reset error:", e);
+        }
     }
 }
 
@@ -1069,13 +1135,23 @@ function setupAuth() {
     }
 }
 
-function updateAuthUI(session) {
+async function updateAuthUI(session) {
     const loginForm = document.getElementById("loginForm");
     const userInfo = document.getElementById("userInfo");
     const userEmailEl = document.getElementById("userEmail");
     const userIdEl = document.getElementById("userId");
 
     if (session) {
+        // ログイン時にも改めてリセット判定（他端末でのログイン直後など）
+        const now = getJSTNow();
+        if (isInSeasonWindow(now)) { // Ensure isInSeasonWindow is correctly implemented
+            const metaId = session.user.user_metadata?.seasonId;
+            if (metaId !== CURRENT_SEASON_ID) {
+                console.log("Season reset triggered (Auth Sync)");
+                await performSeasonReset(true, session.user.id);
+            }
+        }
+
         // ログイン中
         loginForm.style.display = "none";
         userInfo.style.display = "block";
@@ -1083,7 +1159,7 @@ function updateAuthUI(session) {
         userIdEl.textContent = session.user.id;
 
         // ログインしたらデータ再読み込み
-        loadData();
+        await loadData();
     } else {
         // 未ログイン
         loginForm.style.display = "block";
@@ -1093,7 +1169,7 @@ function updateAuthUI(session) {
         document.getElementById("authMessage").textContent = ""; // メッセージクリア
 
         // ログアウトしたらデータ再読み込み（localStorageに戻る）
-        loadData();
+        await loadData();
     }
 }
 
