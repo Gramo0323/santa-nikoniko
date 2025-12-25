@@ -6,7 +6,7 @@
       <feFuncR type="linear" slope="0.1" intercept="0.95" />
       <feFuncG type="linear" slope="0.1" intercept="0.95" />
       <feFuncB type="linear" slope="0.1" intercept="0.95" />
-      <feFuncA type="linear" slope="0.05" />
+      <feFuncA type="linear" slope="0.07" />
     </feComponentTransfer>
   </filter>
   <rect width="100%" height="100%" filter="url(#noise)" fill="#fcfaf2" />

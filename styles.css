@@ -61,9 +61,38 @@ h1 {
   color: var(--accent-red);
   font-family: "Hiragino Maru Gothic Pro", "Yu Gothic", sans-serif;
   letter-spacing: 0.05em;
-  border-bottom: 2px solid var(--accent-gold);
   padding-bottom: 8px;
   display: inline-block;
+  position: relative;
+}
+
+h1::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background-color: var(--accent-gold);
+}
+
+/* 🎍 タイトルマーク装飾 */
+.title-mark {
+  position: relative;
+  display: inline-block;
+}
+
+.title-mark::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-red);
+  border-radius: 50%;
+  border: 1px solid var(--washi-card);
+  pointer-events: none;
 }
 
 .sub {
@@ -170,7 +199,7 @@ h1 {
   /* 濃い赤（朱肉色） */
   border-width: 4px;
   background: #fff5f5;
-  transform: translateY(4px);
+  transform: translateY(2px);
   /* 沈み込み */
   box-shadow: none;
 }
