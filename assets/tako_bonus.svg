@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Sparkle effect -->
+  <circle cx="15" cy="15" r="3" fill="#FFD700" />
+  <circle cx="85" cy="15" r="3" fill="#FFD700" />
+  <circle cx="15" cy="85" r="3" fill="#FFD700" />
+  <circle cx="85" cy="85" r="3" fill="#FFD700" />
+  <circle cx="50" cy="10" r="3" fill="#FFD700" />
+  <circle cx="10" cy="50" r="3" fill="#FFD700" />
+  <circle cx="90" cy="50" r="3" fill="#FFD700" />
+  <circle cx="50" cy="90" r="3" fill="#FFD700" />
+  <!-- Head -->
+  <ellipse cx="50" cy="45" rx="30" ry="25" fill="#FF9800" stroke="#FFD700" stroke-width="4" />
+  <!-- Happy Eyes -->
+  <path d="M35,38 Q40,33 45,38" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" />
+  <path d="M55,38 Q60,33 65,38" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" />
+  <!-- Big Smile -->
+  <path d="M38,52 Q50,65 62,52" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" />
+  <!-- Cheeks -->
+  <circle cx="32" cy="48" r="4" fill="#FFCDD2" opacity="0.7" />
+  <circle cx="68" cy="48" r="4" fill="#FFCDD2" opacity="0.7" />
+  <!-- Tentacles -->
+  <path d="M25,60 Q15,80 20,95" fill="none" stroke="#FF9800" stroke-width="8" stroke-linecap="round" />
+  <path d="M40,65 Q35,85 38,98" fill="none" stroke="#FF9800" stroke-width="8" stroke-linecap="round" />
+  <path d="M50,67 Q50,87 50,98" fill="none" stroke="#FF9800" stroke-width="8" stroke-linecap="round" />
+  <path d="M60,65 Q65,85 62,98" fill="none" stroke="#FF9800" stroke-width="8" stroke-linecap="round" />
+  <path d="M75,60 Q85,80 80,95" fill="none" stroke="#FF9800" stroke-width="8" stroke-linecap="round" />
+</svg>

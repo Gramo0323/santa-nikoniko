@@ -1,18 +1,52 @@
-// 期間設定（固定）
-const START_DATE = new Date("2025-12-12");
-const END_DATE = new Date("2025-12-24");
-const STORAGE_KEY = "santa_nikoniko_v1";
-const BOARD_ID = "b4a467a1-5f6a-4023-8e55-5390a3e98d2a";
-const HELP_DB_PREFIX = "1900-01-"; // Supabaseのvalue制約回避用。日部分に数値を格納。
+// 期間設定（Run2.8 たこあげテーマ）
+const START_DATE_STR = "2026-02-03";
+const END_DATE_STR = "2026-03-31";
+const CURRENT_SEASON_ID = "tako_2026_02_03";
+const STORAGE_KEY = "tako_nikoniko_v1";
+const SEASON_ID_KEY = "tako_season_id";
 
-const POINTS = { "😊": 2, "🙂": 1, "😢": 0 };
+// たこあげスタンプ: 🎐=たのしい(2pt), 🪁=すこし(1pt), 🌥️=くもってる(0pt)
+const POINTS = { "🎐": 2, "🪁": 1, "🌥️": 0 };
 
 // 状態管理
 let appState = {};
-let helpTotal = 0; // Phase2: お手伝いカウンタ（5回で+1サンタスタンプ）
-let supabaseClient = null;
-let isHydrated = false; // 初期ロード完了フラグ
-let saveTimeout = null; // デバウンス用タイマー
+let helpTotal = 0;
+let isHydrated = false;
+let saveTimeout = null;
+
+/**
+ * JST（Asia/Tokyo）基準の現在日付を取得する
+ * 実行環境のローカル時間に依存せず、常に日本時間で判定する
+ */
+function getJSTNow() {
+    const now = new Date();
+    // 日本時間との時差を考慮して調整
+    const jstOffset = 9 * 60; // JSTはUTC+9
+    const localOffset = now.getTimezoneOffset(); // 分単位（JSTなら -540）
+    const jstTime = now.getTime() + (jstOffset + localOffset) * 60 * 1000;
+    return new Date(jstTime);
+}
+
+function formatDateToKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function formatDateKey(date) {
+    return formatDateToKey(date);
+}
+
+const START_DATE_JST = new Date(START_DATE_STR + "T00:00:00+09:00");
+const END_DATE_JST = new Date(END_DATE_STR + "T23:59:59+09:00");
+
+/**
+ * リセット対象期間内（12/26〜1/7）か判定
+ */
+function isInSeasonWindow(now) {
+    return now >= START_DATE_JST && now <= END_DATE_JST;
+}
 
 // 音管理
 const SoundManager = {
@@ -141,7 +175,7 @@ function updateHelpUI() {
     // 残り回数更新
     const remainingEl = document.getElementById('helpRemaining');
     if (remainingEl) {
-        remainingEl.textContent = `あと${remaining}かいで サンタスタンプ+1！`;
+        remainingEl.textContent = `あと${remaining}かいで ごほうびスタンプ+1！`;
     }
 
     // ボーナス表示更新
@@ -160,13 +194,95 @@ function updateHelpUI() {
 
 // 初期化
 document.addEventListener("DOMContentLoaded", () => {
-    renderDays(); // 起動直後に枠だけ先行描画
-    initSupabase();
-    // loadData() は initSupabase -> setupAuth -> updateAuthUI の流れで呼ばれるように変更
+    updateHeaderUI();
+    renderDays();
+    loadData(); // データ読み込みを追加
     setupResetButton();
-    setupHelpButton(); // Phase4: お手伝いボタンセットアップ
+    setupHelpButton();
+    setupOnboarding();
     SoundManager.init();
+
+    // タブ復帰（visibilitychange）で再描画（日付切り替わり対応）
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateHeaderUI();
+            renderDays();
+        }
+    });
 });
+
+/**
+ * ヘッダーのタイトルとサブコピーをJST日付で更新する
+ */
+function updateHeaderUI() {
+    const now = getJSTNow();
+    const dateKey = formatDateToKey(now);
+    const m = now.getMonth() + 1;
+    const d = now.getDate();
+
+    // タイトル
+    const h1 = document.querySelector('header h1');
+    if (h1) {
+        h1.innerHTML = '<span class="title-mark">🎐</span> たこあげカレンダー';
+    }
+    document.title = "たこあげカレンダー";
+
+    // サブコピー
+    const sub = document.querySelector('header .sub');
+    if (sub) {
+        let msg = "きょうも たかく とぼう！";
+        if (m === 2 && d === 3) {
+            msg = "きょうから たこあげスタート！たかく とぼう！";
+        } else if (m === 2 && d >= 4 && d <= 8) {
+            msg = "まめまめしい いちにちを。きょうも たかく とぼう！";
+        } else if (m === 3 && d >= 3 && d <= 8) {
+            msg = "もうすぐ おひなさま。きょうも たかく とぼう！";
+        } else if (m === 3 && d >= 14 && d <= 21) {
+            msg = "春が まっています。きょうも たかく とぼう！";
+        }
+        sub.textContent = msg;
+    }
+}
+
+/**
+ * 導線A（初回おひっこし）の実装
+ */
+function setupOnboarding() {
+    const ONBOARDING_KEY = "tako_onboarding_v1";
+    const now = getJSTNow();
+    const dateKey = formatDateToKey(now);
+
+    // 2/3以降かつ未完了の場合のみ表示
+    if (dateKey >= "2026-02-03" && !localStorage.getItem(ONBOARDING_KEY)) {
+        showOnboardingModal();
+    }
+}
+
+function showOnboardingModal() {
+    const modal = document.createElement('div');
+    modal.id = "takoOnboarding";
+    modal.className = "onboarding-overlay";
+    modal.innerHTML = `
+        <div class="onboarding-card">
+            <h2>🎐 たこあげスタート！</h2>
+            <p>きょうから たこあげカレンダー！<br>いちにち 2かいまで スタンプをおせるよ。<br>たかく とぼう！</p>
+            <div class="onboarding-btns">
+                <button class="btn-primary" id="onboardingOk">スタート！</button>
+                <button class="btn" id="onboardingLater">あとで</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => {
+        localStorage.setItem("tako_onboarding_v1", "done");
+        localStorage.setItem("themeId", "tako");
+        modal.remove();
+    };
+
+    document.getElementById('onboardingOk').onclick = close;
+    document.getElementById('onboardingLater').onclick = close;
+}
 
 // Phase4: お手伝いボタンのセットアップとイベントハンドリング
 function setupHelpButton() {
@@ -204,35 +320,52 @@ function setupHelpButton() {
 }
 
 async function loadData() {
-    // ログイン中の場合、Supabaseから取得
-    if (supabaseClient) {
-        const session = await supabaseClient.auth.getSession();
-        if (session && session.data.session) {
-            await loadDataFromSupabase(session.data.session.user.id);
-            return;
+    // 期間内リセット判定
+    const now = getJSTNow();
+    if (isInSeasonWindow(now)) {
+        const storedId = localStorage.getItem(SEASON_ID_KEY);
+        if (storedId !== CURRENT_SEASON_ID) {
+            console.log("Season reset triggered (Local)");
+            await performSeasonReset();
         }
     }
 
-    // 未ログインまたはエラー時はlocalStorage
+    // LocalStorageからデータ読み込み
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
             appState = JSON.parse(raw);
         }
-        // Phase2: localStorageからhelp_total復元（後方互換：無ければ0）
-        const savedHelp = localStorage.getItem('santa_help_total');
+        const savedHelp = localStorage.getItem('tako_help_total');
         helpTotal = savedHelp ? parseInt(savedHelp, 10) : 0;
         if (isNaN(helpTotal)) helpTotal = 0;
 
-        isHydrated = true; // LocalStorage読み込み完了でHydratedとする（未ログイン時）
+        isHydrated = true;
         renderDays();
         updatePoints();
-        updateHelpUI(); // Phase3: お手伝いUI更新
+        updateHelpUI();
     } catch (e) {
         console.error("保存データの読み込みに失敗しました", e);
-        // エラーでも操作可能にするためHydratedにはする（ただし空データ）
         isHydrated = true;
-        updateHelpUI(); // Phase3: エラー時もUI更新（0表示）
+        updateHelpUI();
+    }
+}
+
+/**
+ * シーズンリセット実行
+ */
+async function performSeasonReset() {
+    // メモリ上の進捗をクリア
+    appState = {};
+    helpTotal = 0;
+
+    // localStorageの進捗をクリア
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem('tako_help_total');
+        localStorage.setItem(SEASON_ID_KEY, CURRENT_SEASON_ID);
+    } catch (e) {
+        console.error("Local reset error:", e);
     }
 }
 
@@ -255,184 +388,15 @@ async function saveData() {
 
 // 実際の保存処理
 async function _performSave() {
-    // 常にlocalStorageには保存（オフライン対応/バックアップ）
+    // LocalStorageに保存
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-        // Phase2: help_totalもlocalStorageに保存
-        localStorage.setItem('santa_help_total', helpTotal.toString());
+        localStorage.setItem('tako_help_total', helpTotal.toString());
     } catch (e) {
         console.error("LocalStorage save error:", e);
     }
 
-    // ログイン中ならSupabaseにも保存
-    if (supabaseClient) {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (session) {
-            await saveDataToSupabase(session.user.id);
-        } else {
-            // ローカルのみ保存の場合もSaved表示
-            showSaveStatus(true);
-        }
-    } else {
-        showSaveStatus(true);
-    }
-}
-
-async function loadDataFromSupabase(userId) {
-    try {
-        // Phase2: 日付範囲の進捗 + _help行の両方を取得
-        // ORフィルタを使用：(date >= START_DATE AND date <= END_DATE) OR date = '_help'
-        const { data, error } = await supabaseClient
-            .from('progress')
-            .select('date, session, value')
-            .eq('board_id', BOARD_ID)
-            .or(`and(date.gte.${formatDateKey(START_DATE)},date.lte.${formatDateKey(END_DATE)}),and(date.gte.${HELP_DB_PREFIX}01,date.lte.${HELP_DB_PREFIX}31)`);
-
-        if (error) throw error;
-
-        // DB形式 ([{date: "...", session: 1, value: "good"}, ...]) を appState形式に変換
-        // マッピング: good->😊, ok->🙂, bad->😢
-        // 逆マッピング用のオブジェクト
-        const DB_TO_UI = { "good": "😊", "ok": "🙂", "bad": "😢" };
-
-        const newState = {};
-        if (data) {
-            data.forEach(row => {
-                if (!newState[row.date]) newState[row.date] = {};
-                const uiValue = DB_TO_UI[row.value];
-                if (uiValue) {
-                    newState[row.date][row.session] = uiValue;
-                }
-            });
-        }
-
-        appState = newState;
-
-        // Phase2: help_total読み込み（特殊行 date=1900-01-XX）
-        const helpRow = data?.find(row => row.date.startsWith(HELP_DB_PREFIX));
-        if (helpRow) {
-            const countStr = helpRow.date.replace(HELP_DB_PREFIX, '');
-            helpTotal = parseInt(countStr, 10);
-            if (isNaN(helpTotal)) helpTotal = 0;
-        } else {
-            helpTotal = 0; // 後方互換：存在しなければ0
-        }
-
-        // 【重要】Supabaseから取得したデータをLocalStorageにも反映（キャッシュ同期）
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-            // Phase2: help_totalもlocalStorageに同期
-            localStorage.setItem('santa_help_total', helpTotal.toString());
-        } catch (e) {
-            console.error("LocalStorage sync error:", e);
-        }
-    } catch (e) {
-        console.error("Supabase load error:", e);
-        // エラー時でも、とりあえずLocalStorageにあるものでHydratedとする（操作不能を防ぐ）
-        // ただし、appStateは更新していないので、既にLocalStorageからロード済みならそのまま
-        if (!isHydrated) {
-            // まだ一度も表示していないならLocalStorageから復元を試みる最終手段
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (raw) appState = JSON.parse(raw);
-            } catch (localE) { }
-        }
-    } finally {
-        updatePoints();
-        updateHelpUI(); // Phase3: お手伝いUI更新
-        isHydrated = true; // Phase4: 読み込み完了でHydratedとする
-        renderDays(); // 成功・失敗に関わらず必ず描画
-    }
-}
-
-async function saveDataToSupabase(userId) {
-    // UI -> DB マッピング
-    const UI_TO_DB = { "😊": "good", "🙂": "ok", "😢": "bad" };
-
-    // appState を progress テーブル用に変換
-    const updates = [];
-
-    Object.keys(appState).forEach(dateKey => {
-        Object.keys(appState[dateKey]).forEach(sessionKey => {
-            const uiVal = appState[dateKey][sessionKey];
-            const dbVal = UI_TO_DB[uiVal];
-
-            if (dbVal) {
-                updates.push({
-                    board_id: BOARD_ID,
-                    date: dateKey,
-                    session: parseInt(sessionKey, 10),
-                    value: dbVal,
-                    updated_by: userId,
-                    updated_at: new Date().toISOString()
-                });
-            }
-        });
-    });
-
-    if (updates.length === 0) return;
-
-    try {
-        // board_id + date + session がユニーク制約になっている前提
-        const { error } = await supabaseClient
-            .from('progress')
-            .upsert(updates, { onConflict: 'board_id, date, session' });
-
-        if (error) throw error;
-        console.log("Supabase(progress)に保存しました");
-        showSaveStatus(true);
-    } catch (e) {
-        console.error("Supabase save error:", e);
-        showSaveStatus(false);
-    }
-
-    // Phase2: help_totalをSupabaseに保存（制約回避のため日付に数値を埋め込む）
-    try {
-        // 前のカウント行を削除（日付が変わるため）
-        await supabaseClient.from('progress').delete().eq('board_id', BOARD_ID).like('date', HELP_DB_PREFIX + '%');
-
-        const dateString = HELP_DB_PREFIX + helpTotal.toString().padStart(2, '0');
-        const { error: helpError } = await supabaseClient
-            .from('progress')
-            .upsert({
-                board_id: BOARD_ID,
-                date: dateString,
-                session: 1,
-                value: 'bad', // 制約回避のため固定値（値自体は意味を持たない）
-                updated_by: userId,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'board_id, date, session' });
-
-        if (helpError) {
-            console.error("Supabase help_total save error:", helpError);
-        }
-    } catch (e) {
-        console.error("Supabase help_total save error:", e);
-    }
-}
-
-async function deleteStampFromSupabase(dateKey, sessionKey) {
-    if (!supabaseClient) return;
-
-    // ログインチェック
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return;
-
-    try {
-        const { error } = await supabaseClient
-            .from('progress')
-            .delete()
-            .eq('board_id', BOARD_ID) // 現状の固定ID運用に合わせる
-            .eq('date', dateKey)
-            .eq('session', parseInt(sessionKey, 10));
-
-        if (error) throw error;
-        console.log(`Supabaseから削除しました: ${dateKey} - ${sessionKey}`);
-        showSaveStatus(true);
-    } catch (e) {
-        console.error("Supabase delete error:", e);
-        showSaveStatus(false);
-    }
+    showSaveStatus(true);
 }
 
 function showSaveStatus(success) {
@@ -467,17 +431,18 @@ function renderDays() {
     const container = document.getElementById("days");
     container.innerHTML = "";
 
-    const current = new Date(START_DATE);
-    const now = new Date();
-    const todayKey = formatDateKey(now);
+    const current = new Date(START_DATE_JST);
+    const nowJST = getJSTNow();
+    const todayKey = formatDateToKey(nowJST);
+    const end = new Date(END_DATE_JST);
 
     // Element storage
     let todayEl = null;
     const otherEls = [];
 
-    while (current <= END_DATE) {
+    while (current <= end) {
         // YYYY-MM-DD形式のキーを生成
-        const dateKey = formatDateKey(current);
+        const dateKey = formatDateToKey(current);
         const displayDate = `${current.getMonth() + 1}/${current.getDate()}`;
 
         // 曜日の取得
@@ -504,6 +469,7 @@ function renderDays() {
       <div class="day-title">${titleHtml}</div>
       ${createRowHtml(dateKey, 1)}
       ${createRowHtml(dateKey, 2)}
+      ${(dateKey === todayKey && isGoodDay(dateKey)) ? '<div class="fuku-badge">福</div>' : ''}
     `;
 
         if (dateKey === todayKey) {
@@ -536,9 +502,9 @@ function createRowHtml(dateKey, time) {
     <div class="row">
       <label>${time === 1 ? "1かいめ" : "2かいめ"}</label>
       <div class="choices">
-        ${createButtonHtml(dateKey, time, "😊", savedValue)}
-        ${createButtonHtml(dateKey, time, "🙂", savedValue)}
-        ${createButtonHtml(dateKey, time, "😢", savedValue)}
+        ${createButtonHtml(dateKey, time, "🎐", savedValue)}
+        ${createButtonHtml(dateKey, time, "🪁", savedValue)}
+        ${createButtonHtml(dateKey, time, "🌥️", savedValue)}
       </div>
     </div>
   `;
@@ -560,14 +526,12 @@ function handleChoiceClick(e) {
         appState[dateKey] = {};
     }
 
-    const todayKey = formatDateKey(new Date());
+    const todayKey = formatDateKey(getJSTNow());
     const wasGood = isGoodDay(todayKey); // 変更前の状態
 
     // トグル動作：既に選択されているものを押したら解除
     if (appState[dateKey][time] === type) {
         delete appState[dateKey][time];
-        // Supabaseからも即座に削除
-        deleteStampFromSupabase(dateKey, time);
 
         // 空になったらキー削除（データクリーンアップ）
         if (Object.keys(appState[dateKey]).length === 0) {
@@ -578,8 +542,8 @@ function handleChoiceClick(e) {
         appState[dateKey][time] = type;
 
         // 音を鳴らす
-        if (type === "😊") SoundManager.play('happy');
-        else if (type === "🙂") SoundManager.play('ok');
+        if (type === "🎐") SoundManager.play('happy');
+        else if (type === "🪁") SoundManager.play('ok');
         else SoundManager.play('bad');
     }
 
@@ -601,12 +565,12 @@ function updatePoints() {
     let todayBonus = 0;
 
     // 今日の日付キーを取得（期間判定も兼ねる）
-    const now = new Date();
+    const now = getJSTNow();
     const todayKey = formatDateKey(now);
     let isTodayInRange = false;
 
-    // 期間内かチェック（簡易的：開始日〜終了日の範囲内か）
-    if (now >= START_DATE && now <= END_DATE) {
+    // 期間内かチェック
+    if (now >= START_DATE_JST && now <= END_DATE_JST) {
         isTodayInRange = true;
     }
 
@@ -632,9 +596,9 @@ function updatePoints() {
     });
 
     // 2. ボーナス点の集計（期間内の日付について isGoodDay を判定）
-    let checkDate = new Date(START_DATE);
-    while (checkDate <= END_DATE) {
-        const dKey = formatDateKey(checkDate);
+    let checkDate = new Date(START_DATE_JST);
+    while (checkDate <= END_DATE_JST) {
+        const dKey = formatDateToKey(checkDate);
         if (isGoodDay(dKey)) {
             totalBonus += 1;
             if (dKey === todayKey) {
@@ -671,10 +635,10 @@ function calculateStreak() {
     const todayKey = formatDateKey(today);
 
     // 期間内の日付リスト作成（開始日〜今日）
-    let checkDate = new Date(START_DATE);
+    let checkDate = new Date(START_DATE_JST);
     const dateKeys = [];
-    while (checkDate <= END_DATE && checkDate <= today) {
-        dateKeys.push(formatDateKey(checkDate));
+    while (checkDate <= END_DATE_JST && checkDate <= today) {
+        dateKeys.push(formatDateToKey(checkDate));
         checkDate.setDate(checkDate.getDate() + 1);
     }
 
@@ -762,7 +726,7 @@ function isGoodDay(dateKey) {
 }
 
 function isGoodOrBetter(val) {
-    return val === "😊" || val === "🙂";
+    return val === "🎐" || val === "🪁";
 }
 
 function renderSugoroku(totalScore, baseScore) {
@@ -788,8 +752,8 @@ function renderSugoroku(totalScore, baseScore) {
             // ユーザー要件によりimg要素を生成・挿入
             const img = document.createElement("img");
             // file:// プロトコルでも正しく参照できるようにベースURIを使用
-            img.src = new URL('assets/bonus-santa.png', document.baseURI).href;
-            img.alt = "BONUS Santa";
+            img.src = new URL('assets/tako_bonus.svg', document.baseURI).href;
+            img.alt = "たこあげ ボーナス";
             img.className = "bonus-img";
             sq.appendChild(img);
         }
@@ -815,37 +779,12 @@ function setupResetButton() {
     btn.addEventListener("click", () => {
         if (confirm("ほんとうに ぜんぶ けしますか？")) {
             appState = {};
-            helpTotal = 0; // Phase2: help_totalもリセット
-            saveData(); // Supabase側も空にすべきだが、saveDataの実装上 updates=[] になると消えない。
-            // 明示的に削除処理を入れる
-            if (supabaseClient) {
-                supabaseClient.auth.getSession().then(({ data: { session } }) => {
-                    if (session) {
-                        // 期間内のデータを削除
-                        supabaseClient.from('progress')
-                            .delete()
-                            .eq('board_id', BOARD_ID)
-                            .gte('date', formatDateKey(START_DATE))
-                            .lte('date', formatDateKey(END_DATE))
-                            .then(() => {
-                                console.log("Supabaseデータを全削除しました");
-                            });
-                        // Phase2: help_total行も削除
-                        supabaseClient.from('progress')
-                            .delete()
-                            .eq('board_id', BOARD_ID)
-                            .eq('date', '_help')
-                            .then(() => {
-                                console.log("Supabase help_totalを削除しました");
-                            });
-                    }
-                });
-            }
-            // Phase2: localStorageからもhelp_total削除
-            localStorage.removeItem('santa_help_total');
+            helpTotal = 0;
+            localStorage.removeItem('tako_help_total');
+            saveData();
             renderDays();
             updatePoints();
-            updateHelpUI(); // Phase3: お手伝いUI更新
+            updateHelpUI();
         }
     });
 }
@@ -856,138 +795,6 @@ function formatDateKey(dateObj) {
     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
     const d = String(dateObj.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
-}
-
-async function initSupabase() {
-    const statusEl = document.getElementById("supabase-status");
-    if (!statusEl) return;
-
-    if (typeof supabase === 'undefined') {
-        statusEl.textContent = "Supabase: SDK not loaded";
-        statusEl.style.color = "red";
-        return;
-    }
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.startsWith("YOUR_")) {
-        statusEl.textContent = "Supabase: Pending config";
-        statusEl.style.color = "orange";
-        return;
-    }
-
-    try {
-        const { createClient } = supabase;
-        supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // 接続確認のため軽量なリクエストを送信
-        const { error } = await supabaseClient.auth.getSession();
-
-        if (error) {
-            throw error;
-        }
-
-        statusEl.textContent = "Supabase: connected";
-        statusEl.style.color = "green";
-        console.log("Supabase initialized successfully");
-
-        // Auth初期化
-        setupAuth();
-
-    } catch (e) {
-        console.error("Supabase connection error:", e);
-        statusEl.textContent = "Supabase: not connected";
-        statusEl.style.color = "red";
-    }
-}
-
-function setupAuth() {
-    if (!supabaseClient) return;
-
-    // セッション状態監視
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-        updateAuthUI(session);
-    });
-
-    // 初期セッション確認（非同期）
-    supabaseClient.auth.getSession().then(({ data: { session } }) => {
-        updateAuthUI(session);
-    });
-
-    // リスナー設定
-    const sendBtn = document.getElementById("sendMagicLinkBtn");
-    if (sendBtn) {
-        sendBtn.addEventListener("click", async () => {
-            const emailInput = document.getElementById("emailInput");
-            const email = emailInput.value;
-            const msgEl = document.getElementById("authMessage");
-
-            if (!email) {
-                alert("メールアドレスを入力してください");
-                return;
-            }
-
-            msgEl.textContent = "送信中...";
-            msgEl.style.color = "#666";
-            sendBtn.disabled = true;
-
-            const { error } = await supabaseClient.auth.signInWithOtp({
-                email: email,
-                options: {
-                    emailRedirectTo: window.location.origin, // サイトのルートに戻る
-                }
-            });
-
-            if (error) {
-                console.error("Login error:", error);
-                msgEl.textContent = "エラー: " + error.message;
-                msgEl.style.color = "red";
-                sendBtn.disabled = false;
-            } else {
-                msgEl.textContent = "ログインリンクを送信しました！メールを確認してください。";
-                msgEl.style.color = "green";
-                // ボタンはそのままdisabledにしておく（連打防止）
-                setTimeout(() => { sendBtn.disabled = false; }, 5000);
-            }
-        });
-    }
-
-    const logoutBtn = document.getElementById("logoutBtn");
-    if (logoutBtn) {
-        logoutBtn.addEventListener("click", async () => {
-            const { error } = await supabaseClient.auth.signOut();
-            if (error) {
-                console.error("Logout error:", error);
-            }
-            // onAuthStateChangeが呼ばれるのでここでUI更新は不要
-        });
-    }
-}
-
-function updateAuthUI(session) {
-    const loginForm = document.getElementById("loginForm");
-    const userInfo = document.getElementById("userInfo");
-    const userEmailEl = document.getElementById("userEmail");
-    const userIdEl = document.getElementById("userId");
-
-    if (session) {
-        // ログイン中
-        loginForm.style.display = "none";
-        userInfo.style.display = "block";
-        userEmailEl.textContent = session.user.email;
-        userIdEl.textContent = session.user.id;
-
-        // ログインしたらデータ再読み込み
-        loadData();
-    } else {
-        // 未ログイン
-        loginForm.style.display = "block";
-        userInfo.style.display = "none";
-        userEmailEl.textContent = "";
-        userIdEl.textContent = "";
-        document.getElementById("authMessage").textContent = ""; // メッセージクリア
-
-        // ログアウトしたらデータ再読み込み（localStorageに戻る）
-        loadData();
-    }
 }
 
 // Step 2: Timer Logic (Countdown)
