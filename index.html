@@ -4,15 +4,15 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>🎍 だるまの にこにこカレンダー</title>
+    <title>🎐 たこあげカレンダー</title>
     <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
     <header class="wrap">
         <div class="header-banner">
-            <h1><span class="title-mark">🎍</span> だるまの にこにこカレンダー</h1>
-            <p class="sub">2025/12/12〜12/24｜1にち2かいまで</p>
+            <h1><span class="title-mark">🎐</span> たこあげカレンダー</h1>
+            <p class="sub">2026/2/3〜3/31｜1にち2かいまで</p>
         </div>
         <div id="scoreBoard" class="score-board">
             <div class="score-item">きょう <span id="scoreToday">0</span>てん</div>
@@ -75,35 +75,12 @@
         </div>
 
         <div id="sugorokuArea">
-            <h2>にこにこロード</h2>
+            <h2>たこあげロード</h2>
             <div id="sugorokuBoard" class="board"></div>
         </div>
         <div id="days"></div>
     </main>
 
-    <div id="authArea" class="wrap" style="margin-top: 24px; border-top: 1px solid #ddd; padding-top: 16px;">
-        <div id="loginForm">
-            <h3>ほごしゃメニュー</h3>
-            <p style="font-size: 0.9em; color: #666;">メールアドレスを入力して、ログインリンクを受け取ってください。</p>
-            <div style="display: flex; gap: 8px; max-width: 400px; margin-bottom: 8px;">
-                <input type="email" id="emailInput" placeholder="email@example.com" class="input-text" />
-                <button id="sendMagicLinkBtn" class="btn-primary">ログインリンク送信</button>
-            </div>
-            <div id="authMessage" style="font-size: 0.9em;"></div>
-        </div>
-
-        <div id="userInfo" style="display: none;">
-            <h3>ログイン中</h3>
-            <p>Email: <span id="userEmail"></span></p>
-            <p style="font-size: 0.8em; color: #888;">ID: <span id="userId"></span></p>
-            <button id="logoutBtn" class="btn">ログアウト</button>
-        </div>
-    </div>
-    <div id="supabase-status" style="position: fixed; bottom: 5px; right: 5px; font-size: 10px; opacity: 0.7;">Supabase:
-        connecting...</div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./config.js"></script>
     <script src="./app.js"></script>
     <div id="bonusOverlay" class="bonus-overlay">
         <div>+1 ボーナス！</div>

@@ -280,7 +280,7 @@ h1::after {
   content: "";
   position: absolute;
   inset: 2px;
-  background-image: url('./assets/daruma_stamp.png');
+  background-image: url('./assets/tako_stamp.svg');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -685,4 +685,57 @@ h1::after {
   .help-remaining {
     text-align: center;
   }
+}
+
+/* おひっこしモーダル */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.onboarding-card {
+  background: var(--washi-card);
+  padding: 24px;
+  border-radius: 16px;
+  border: 2px solid var(--accent-red);
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.onboarding-card h2 {
+  color: var(--accent-red);
+  margin: 0 0 16px;
+}
+
+.onboarding-card p {
+  color: var(--ink);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.onboarding-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.onboarding-btns button {
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.onboarding-btns .btn-primary {
+  background: var(--accent-red);
+  color: #fff;
+  border-color: var(--accent-red);
 }
